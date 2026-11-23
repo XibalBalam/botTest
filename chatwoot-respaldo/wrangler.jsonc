@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chatwoot-respaldo",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  // Revisa los chats cada minuto
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "chatwoot-respaldo" }
+  ],
+  "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
+  "vars": {
+    // Solo se permite iniciar sesión con usuarios de este Chatwoot
+    "CHATWOOT_URL": "https://chat.deltatracking.com",
+    "EMPRESA": "Skyguard"
+  }
+}
