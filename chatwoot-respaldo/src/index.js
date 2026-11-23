@@ -239,6 +239,19 @@ async function telegram(env, chatId, texto, silencioso = false) {
   });
   return r.ok;
 }
+async function textoCallMeBot(env, usuario, texto) {
+  if (!usuario) return false;
+  const base = (env.CALLMEBOT_BASE || "https://api.callmebot.com").replace(/\/+$/, "");
+  const u = usuario.startsWith("@") || usuario.startsWith("+") ? usuario : "@" + usuario;
+  const r = await fetch(`${base}/text.php?user=${encodeURIComponent(u)}&text=${encodeURIComponent(texto)}`);
+  return r.ok;
+}
+// Avisa por el bot propio si existe y está vinculado; si no, por mensaje de CallMeBot
+async function avisar(env, u, texto, silencioso = false) {
+  if (env.TELEGRAM_BOT_TOKEN && u.tg_chat_id) return telegram(env, u.tg_chat_id, texto, silencioso);
+  if (u.callmebot) return textoCallMeBot(env, u.callmebot, texto);
+  return false;
+}
 async function llamar(env, usuario, texto) {
   if (!usuario) return false;
   const base = (env.CALLMEBOT_BASE || "https://api.callmebot.com").replace(/\/+$/, "");
@@ -367,7 +380,7 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
       if (yaAvisado) avisado = true;
       else {
         const icono = dec.urgencia === "emergencia" ? "🚨 EMERGENCIA" : "⭐ Prioridad";
-        avisado = await telegram(env, u.tg_chat_id, `${icono}${ensayo ? " (ensayo)" : ""}\n${contacto} · chat #${c.id}\n${dec.resumen}\nMotivo: ${dec.motivo}\n${dec.accion === "responder" ? `Se le respondió: "${dec.mensaje}"` : "No se le respondió."}\n${enlace}`, dec.urgencia !== "emergencia" && e.alerta !== "emergencia");
+        avisado = await avisar(env, u, `${icono}${ensayo ? " (ensayo)" : ""}\n${contacto} · chat #${c.id}\n${dec.resumen}\nMotivo: ${dec.motivo}\n${dec.accion === "responder" ? `Se le respondió: "${dec.mensaje}"` : "No se le respondió."}\n${enlace}`, dec.urgencia !== "emergencia" && e.alerta !== "emergencia");
         if (dec.urgencia === "emergencia" && u.callmebot) avisado = (await llamar(env, u.callmebot, `Emergencia en Chatwoot. ${contacto} reporta: ${dec.resumen}. Revisa el chat ${c.id}.`)) || avisado;
       }
     }
@@ -385,7 +398,7 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
       env.DB.prepare(`INSERT INTO convs (user_id, conv_id, ultimo_msg, respuestas, actualizado) VALUES (?,?,?,?,?) ON CONFLICT (user_id, conv_id) DO UPDATE SET ultimo_msg = excluded.ultimo_msg, actualizado = excluded.actualizado`).bind(u.id, c.id, ult.id, e.respuestas || 0, ahora()),
       await registrar(env, u.id, c.id, "error", `${contacto}: ${err.message}`),
     );
-    if (/llave|modelo/.test(err.message)) await telegram(env, u.tg_chat_id, `⚠️ El respaldo no pudo atender el chat #${c.id}: ${err.message}`).catch(() => {});
+    if (/llave|modelo/.test(err.message)) await avisar(env, u, `⚠️ El respaldo no pudo atender el chat #${c.id}: ${err.message}`).catch(() => {});
   }
   await env.DB.batch(sentencias);
 }
@@ -551,7 +564,7 @@ async function api(req, env, url) {
 
   if (ruta === "/api/telegram/probar" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
-    const ok = await telegram(env, u.tg_chat_id, "🔔 Prueba del respaldo de Chatwoot: así te llegarán los avisos.");
+    const ok = await avisar(env, u, "🔔 Prueba del respaldo de Chatwoot: así te llegarán los avisos.");
     let llamada = null;
     if (b.llamada && u.callmebot) llamada = await llamar(env, u.callmebot, "Prueba del respaldo de Chatwoot. Así sonará una emergencia.");
     return json({ telegram: ok, llamada });

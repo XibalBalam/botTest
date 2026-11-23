@@ -148,14 +148,15 @@ main{max-width:920px;margin:0 auto;padding:18px}
     <div data-p="avisos" class="hide">
       <div class="card">
         <h2>Avisos por Telegram</h2>
+        <div class="help" id="tg-sinbot">No hace falta crear un bot: los avisos te llegan como mensaje de <b>CallMeBot</b> en Telegram. Solo configura tu usuario en la sección de abajo.</div>
         <div class="muted small">⭐ <b>Prioridad</b> (quiere agendar, pagar, negociar, reclamo): mensaje sin sonido. 🚨 <b>Emergencia</b> (robo, asalto, vehículo desaparecido): mensaje con sonido y llamada.</div>
         <div class="estado" id="tg-st"></div>
         <div class="save" style="justify-content:flex-start"><button class="pri" id="b-tg">Vincular mi Telegram</button><button id="b-tg-test">Enviar prueba</button></div>
         <div id="tg-link" class="help hide"></div>
       </div>
       <div class="card">
-        <h2>Llamada en emergencias</h2>
-        <div class="muted small">Una llamada de Telegram que suena aunque estés dormido, con el servicio gratuito CallMeBot.</div>
+        <h2>CallMeBot: mensajes y llamada de emergencia</h2>
+        <div class="muted small">Servicio gratuito que te escribe por Telegram y, en emergencias, te hace una llamada de Telegram que suena aunque estés dormido.</div>
         <div class="help"><ol>
           <li>En Telegram, ponte un nombre de usuario (Ajustes → Nombre de usuario), por ejemplo <b>@luis_skyguard</b>.</li>
           <li>Abre <b>@CallMeBot_txtbot</b> en Telegram y envíale <b>/start</b> para autorizar las llamadas.</li>
@@ -220,10 +221,12 @@ async function cargar(rellenar = true) {
   const st = [];
   st.push(YO.fuera_de_horario ? '<span class="pill ok">Ahora: fuera de horario (el respaldo trabaja)</span>' : '<span class="pill">Ahora: horario de oficina (el respaldo espera)</span>');
   st.push(YO.tiene_gemini ? '<span class="pill ok">Gemini conectado</span>' : '<span class="pill bad">Falta la llave de Gemini</span>');
-  st.push(YO.telegram ? '<span class="pill ok">Telegram vinculado</span>' : '<span class="pill warn">Telegram sin vincular</span>');
+  st.push(YO.telegram || YO.callmebot ? '<span class="pill ok">Avisos por Telegram listos</span>' : '<span class="pill warn">Avisos sin configurar</span>');
   st.push(YO.callmebot ? '<span class="pill ok">Llamada de emergencia lista</span>' : '<span class="pill warn">Sin llamada de emergencia</span>');
   $("#estado").innerHTML = st.join("");
-  $("#tg-st").innerHTML = !YO.telegram_configurado ? '<span class="pill bad">El administrador aún no configuró el bot de Telegram</span>' : YO.telegram ? '<span class="pill ok">Vinculado</span>' : '<span class="pill warn">Sin vincular</span>';
+  $("#tg-st").innerHTML = !YO.telegram_configurado ? "" : YO.telegram ? '<span class="pill ok">Bot propio vinculado</span>' : '<span class="pill warn">Bot propio sin vincular</span>';
+  $("#tg-sinbot").classList.toggle("hide", !!YO.telegram_configurado);
+  $("#b-tg").classList.toggle("hide", !YO.telegram_configurado);
   $("#reg").innerHTML = YO.registro.length ? YO.registro.map((r) => `<tr><td class="small muted" style="white-space:nowrap">${fmt(r.ts)}</td><td class="tp ${esc(r.tipo)}">${esc(r.tipo)}</td><td>${r.conv_id ? `<a href="${esc(YO.chatwoot)}/app/accounts/${YO.account_id}/conversations/${r.conv_id}" target="_blank">#${r.conv_id}</a> ` : ""}${esc(r.detalle)}</td></tr>`).join("") : '<tr><td class="muted">Todavía no hay actividad.</td></tr>';
   if (rellenar) llenar();
 }
@@ -256,7 +259,7 @@ $("#b-g-hor").onclick = () => {
 };
 $("#b-g-av").onclick = () => guardar($("#b-g-av"), { callmebot: $("#callmebot").value.trim() });
 $("#b-tg").onclick = () => ocupado($("#b-tg"), async () => { const r = await call("POST", "/api/telegram/vincular"); $("#tg-link").innerHTML = `Abre este enlace en tu celular y toca <b>Iniciar</b>: <br><a href="${esc(r.enlace)}" target="_blank">${esc(r.enlace)}</a><br><span class="small muted">Luego vuelve aquí y recarga.</span>`; $("#tg-link").classList.remove("hide"); });
-$("#b-tg-test").onclick = () => ocupado($("#b-tg-test"), async () => { const r = await call("POST", "/api/telegram/probar", {}); toast(r.telegram ? "Mensaje de prueba enviado" : "No se pudo enviar. ¿Ya vinculaste Telegram?"); });
+$("#b-tg-test").onclick = () => ocupado($("#b-tg-test"), async () => { await call("POST", "/api/ajustes", { callmebot: $("#callmebot").value.trim() }); const r = await call("POST", "/api/telegram/probar", {}); toast(r.telegram ? "Mensaje de prueba enviado" : "No se pudo enviar. Revisa tu usuario y que enviaste /start a @CallMeBot_txtbot"); });
 $("#b-call-test").onclick = () => ocupado($("#b-call-test"), async () => { await call("POST", "/api/ajustes", { callmebot: $("#callmebot").value.trim() }); const r = await call("POST", "/api/telegram/probar", { llamada: true }); toast(r.llamada ? "Llamada solicitada: debería sonar en unos segundos" : "No se pudo llamar. Revisa tu usuario y que enviaste /start a @CallMeBot_txtbot"); await cargar(); });
 
 function pintarSim() {
