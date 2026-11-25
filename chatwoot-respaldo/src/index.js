@@ -345,9 +345,6 @@ async function revisarUsuario(env, u, presupuesto, ctxOpc = {}) {
     const delCliente = ult.message_type === 0 && !ult.private;
     // Traspaso: lo último es del bot (mensaje o nota interna), no de una persona del equipo
     const delBot = ult.message_type === 1 && ult.sender_type !== "User" && ult.sender?.type !== "user";
-    // Señal del vendedor con nota privada: #sigue (retomar) o #pausa (no tocar este chat)
-    const comando = ult.private && !delBot ? (norm(ult.content).match(/#(sigue|pausa)\b/) || [])[1] : null;
-    if (comando) { candidatos.push({ c, ult, comando }); continue; }
     if (!delCliente && !delBot) continue;
     const edad = t - (ult.created_at || c.last_activity_at || t);
     if (edad > 12 * 3600) continue; // no revivir chats viejos
@@ -362,21 +359,12 @@ async function revisarUsuario(env, u, presupuesto, ctxOpc = {}) {
   const estados = await env.DB.prepare(`SELECT * FROM convs WHERE user_id = ? AND conv_id IN (${ids.map(() => "?").join(",")})`).bind(u.id, ...ids).all();
   const est = Object.fromEntries((estados.results || []).map((e) => [e.conv_id, e]));
 
-  for (const { c, ult, reenganche, comando } of candidatos) {
+  for (const { c, ult, reenganche } of candidatos) {
     const e = est[c.id] || { ultimo_msg: 0, respuestas: 0 };
     if (e.ultimo_msg >= ult.id) continue;
-    if (comando === "pausa") {
-      // Pausa indefinida de este chat, sin gastar consultas
-      await env.DB.batch([
-        env.DB.prepare(`INSERT INTO convs (user_id, conv_id, ultimo_msg, pausa_hasta, actualizado) VALUES (?,?,?,?,?) ON CONFLICT (user_id, conv_id) DO UPDATE SET ultimo_msg = excluded.ultimo_msg, pausa_hasta = excluded.pausa_hasta, actualizado = excluded.actualizado`).bind(u.id, c.id, ult.id, ahora() + 30 * 86400, ahora()),
-        await registrar(env, u.id, c.id, "pausa", `${c.meta?.sender?.name || "Cliente"}: en pausa por tu nota #pausa. Escribe #sigue para que retome.`),
-      ]);
-      continue;
-    }
-    if (!comando && (e.pausa_hasta || 0) > ahora()) continue; // estás atendiendo tú este chat
-    if (comando === "sigue") e.tarea = "sigue";
+    if ((e.pausa_hasta || 0) > ahora()) continue; // estás atendiendo tú este chat
     if (reenganche && e.reenganche) continue; // solo una vez por chat
-    if (!comando) e.tarea = reenganche ? "reenganche" : null;
+    e.tarea = reenganche ? "reenganche" : null;
     if (!presupuesto.tomar(9)) return; // no alcanza para atender este chat completo; sigue el próximo minuto
     await atenderChat(env, u, token, key, c, ult, e, presupuesto);
   }
@@ -406,24 +394,21 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
     const esHumano = (m) => m && (m.sender_type === "User" || m.sender?.type === "user");
     if (esHumano(ultNuestro) && e.actualizado && ultNuestro.id !== e.enviado && (ultNuestro.created_at >= e.actualizado || (e.enviado && ultNuestro.id > e.enviado))) { e.alerta = null; e.respuestas = 0; e.reenganche = 0; }
     const reenganche = e.tarea === "reenganche";
-    const reanudar = e.tarea === "sigue";
     // ¿El vendedor está atendiendo este chat? (mensajes suyos que no envió el respaldo)
     let misIds;
     try { misIds = new Set(JSON.parse(e.enviados || "[]")); } catch { misIds = new Set(); }
     if (e.enviado) misIds.add(e.enviado);
-    let ultHumano = 0, tsSigue = 0;
+    let ultHumano = 0;
     for (const m of mensajes) {
-      if (m.message_type !== 1 || !esHumano(m)) continue;
-      if (m.private) { if (/#sigue\b/.test(norm(m.content))) tsSigue = Math.max(tsSigue, m.created_at || 0); }
-      else if (!misIds.has(m.id)) ultHumano = Math.max(ultHumano, m.created_at || 0);
+      if (m.message_type === 1 && !m.private && esHumano(m) && !misIds.has(m.id)) ultHumano = Math.max(ultHumano, m.created_at || 0);
     }
     const horasPausa = Number(u.pausa_horas ?? 2);
-    if (!reanudar && horasPausa > 0 && ultHumano > tsSigue && ahora() - ultHumano < horasPausa * 3600) {
+    if (horasPausa > 0 && ultHumano && ahora() - ultHumano < horasPausa * 3600) {
       const hasta = ultHumano + horasPausa * 3600;
       const hh = new Date(hasta * 1000).toLocaleTimeString("es", { timeZone: u.tz, hour: "2-digit", minute: "2-digit" });
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO convs (user_id, conv_id, pausa_hasta, actualizado) VALUES (?,?,?,?) ON CONFLICT (user_id, conv_id) DO UPDATE SET pausa_hasta = excluded.pausa_hasta`).bind(u.id, c.id, hasta, ahora()),
-        await registrar(env, u.id, c.id, "pausa", `${contacto}: estás atendiendo tú; no respondo este chat hasta las ${hh} (o hasta tu nota #sigue).`),
+        await registrar(env, u.id, c.id, "pausa", `${contacto}: estás atendiendo tú; no respondo este chat hasta las ${hh}; si no respondes, retomo yo.`),
       ]);
       return;
     }
@@ -433,9 +418,7 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
     const hayHumano = mensajes.some((m) => m.message_type === 1 && !m.private && esHumano(m));
 
     let dec;
-    if (reanudar && !pendientes.length) {
-      dec = { accion: "no_responder", mensaje: "", urgencia: "ninguna", motivo: "retomado con #sigue; no hay mensajes pendientes del cliente", resumen: "" };
-    } else if (reenganche && (!hayCliente || hayHumano)) {
+    if (reenganche && (!hayCliente || hayHumano)) {
       dec = { accion: "no_responder", mensaje: "", urgencia: "ninguna", motivo: hayHumano ? "ya hay respuesta del equipo" : "el cliente no ha escrito nada", resumen: "" };
     } else if (reenganche) {
       dec = await preguntarGemini(env, u, key, transcribir(mensajes, u), null, TAREA_REENGANCHE);
@@ -478,13 +461,12 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
       if (!ensayo) {
         const labels = [...new Set([...(c.labels || []), etiqueta])];
         await cw(env, u, token, "POST", `/conversations/${c.id}/labels`, { labels }).catch(() => {});
-        await cw(env, u, token, "POST", `/conversations/${c.id}/messages`, { content: `⚠️ ${etiqueta.toUpperCase()}: ${dec.resumen}\nMotivo: ${dec.motivo}`, message_type: "outgoing", private: true }).catch(() => {});
       }
       const yaAvisado = e.alerta === dec.urgencia && dec.urgencia !== "emergencia" && ahora() - (e.actualizado || 0) < 3600 && !/sigue escribiendo/.test(dec.motivo);
       if (yaAvisado) avisado = true;
       else {
         const icono = dec.urgencia === "emergencia" ? "🚨 EMERGENCIA" : "⭐ Prioridad";
-        avisado = await avisar(env, u, `${icono}${ensayo ? " (ensayo)" : ""}\n${contacto} · chat #${c.id}\n${dec.resumen}\nMotivo: ${dec.motivo}\n${dec.accion === "responder" ? `Se le respondió: "${dec.mensaje}"` : "No se le respondió."}\n${enlace}\nSi entras tú, el respaldo se pausa solo en ese chat. Nota privada #sigue para que retome.`, dec.urgencia !== "emergencia" && e.alerta !== "emergencia");
+        avisado = await avisar(env, u, `${icono}${ensayo ? " (ensayo)" : ""}\n${contacto} · chat #${c.id}\n${dec.resumen}\nMotivo: ${dec.motivo}\n${dec.accion === "responder" ? `Se le respondió: "${dec.mensaje}"` : "No se le respondió."}\n${enlace}\nSi respondes tú, el respaldo se hace a un lado en ese chat.`, dec.urgencia !== "emergencia" && e.alerta !== "emergencia");
         if (dec.urgencia === "emergencia" && u.callmebot) avisado = (await llamar(env, u.callmebot, `Emergencia en Chatwoot. ${contacto} reporta: ${dec.resumen}. Revisa el chat ${c.id}.`)) || avisado;
       }
     }
@@ -494,7 +476,7 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
         ON CONFLICT (user_id, conv_id) DO UPDATE SET ultimo_msg = excluded.ultimo_msg, respuestas = excluded.respuestas, alerta = excluded.alerta, actualizado = excluded.actualizado, enviado = excluded.enviado`)
         .bind(u.id, c.id, ult.id, (e.respuestas || 0) + (dec.accion === "responder" && !ensayo ? 1 : 0), e.alerta === "emergencia" ? "emergencia" : avisado ? dec.urgencia : e.alerta || null, ahora(), enviadoId || e.enviado || 0),
       env.DB.prepare("UPDATE convs SET reenganche = ?, pausa_hasta = 0, enviados = ? WHERE user_id = ? AND conv_id = ?").bind(reenganche ? 1 : e.reenganche || 0, JSON.stringify([...misIds, ...(enviadoId ? [enviadoId] : [])].slice(-30)), u.id, c.id),
-      await registrar(env, u.id, c.id, dec.accion === "responder" ? (ensayo ? "ensayo" : reenganche ? "retomó" : "respondió") : reanudar ? "sigue" : "sin respuesta",
+      await registrar(env, u.id, c.id, dec.accion === "responder" ? (ensayo ? "ensayo" : reenganche ? "retomó" : "respondió") : "sin respuesta",
         `${contacto}: "${textoCliente.slice(0, 200)}" → ${dec.accion === "responder" ? `"${dec.mensaje}"` : "(no respondió)"} · urgencia: ${dec.urgencia}${dec.motivo ? " (" + dec.motivo + ")" : ""}`),
     );
   } catch (err) {

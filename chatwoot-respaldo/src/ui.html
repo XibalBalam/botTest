@@ -46,7 +46,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
 .reg{width:100%;border-collapse:collapse;font-size:13px}
 .reg td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 .reg .tp{white-space:nowrap;font-weight:600}
-.tp.respondió,.tp.retomó,.tp.sigue{color:var(--brand)}.tp.pausa{color:var(--warn)}.tp.error,.tp.bloqueada{color:var(--bad)}.tp.ensayo{color:var(--info)}
+.tp.respondió,.tp.retomó{color:var(--brand)}.tp.pausa{color:var(--warn)}.tp.error,.tp.bloqueada{color:var(--bad)}.tp.ensayo{color:var(--info)}
 .sim{display:flex;flex-direction:column;gap:8px;background:#f7f8f5;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:160px;max-height:420px;overflow:auto}
 .b{padding:8px 11px;border-radius:10px;max-width:80%;white-space:pre-wrap;word-wrap:break-word}
 .b.c{align-self:flex-start;background:#fff;border:1px solid var(--line)}
@@ -100,7 +100,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
           <button class="modo auto" data-m="automatico"><b>Automático</b><span class="small muted">Responde al cliente como tú, con espera al azar.</span></button>
         </div>
         <div class="estado" id="estado"></div>
-        <div class="help">¿Vas a atender tú un chat? Solo escríbele al cliente: el respaldo se pausa solo en ese chat. Desde Chatwoot también puedes dejar una <b>nota privada</b> con <b>#pausa</b> (no lo toca hasta que digas) o <b>#sigue</b> (lo retoma ya).</div>
+        <div class="help">¿Vas a atender tú un chat? Solo escríbele al cliente: el respaldo se hace a un lado en ese chat. Si dejas de responder, él retoma solo.</div>
       </div>
       <div class="card">
         <div class="row" style="justify-content:space-between"><h2>Actividad reciente</h2><div class="row" style="width:auto"><button id="b-revisar">Revisar ahora</button><button id="b-recargar">↻</button></div></div>
@@ -140,7 +140,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
         <div class="grid2">
           <div><label>Esperar antes de responder (al azar)</label><div class="row"><input id="esp-min" type="number" min="0" max="60"> <span>a</span> <input id="esp-max" type="number" min="0" max="60"> <span>min</span></div></div>
           <div><label>Máximo de respuestas por chat</label><input id="max-resp" type="number" min="1" max="20"><div class="small muted">Después de eso solo te avisa.</div></div>
-          <div><label>Pausa cuando atiendes tú</label><div class="row"><input id="pausa-h" type="number" min="0" max="24"> <span>horas</span></div><div class="small muted">Si escribes en un chat, el respaldo no lo toca por este tiempo. 0 = sin pausa.</div></div>
+          <div><label>Pausa cuando atiendes tú</label><div class="row"><input id="pausa-h" type="number" min="0" max="24"> <span>horas</span></div><div class="small muted">Si escribes en un chat, el respaldo no lo toca por este tiempo desde tu último mensaje; después retoma solo. 0 = sin pausa.</div></div>
           <div><label>Solo chats con esta etiqueta (opcional)</label><input id="etiqueta" placeholder="ej. sk_sv_atencion_humana"><div class="small muted">Vacío = todos tus chats asignados.</div></div>
           <div><label>Modelo de Gemini</label><input id="modelo" list="modelos"><datalist id="modelos"><option value="gemini-3.5-flash"><option value="gemini-3.5-flash-lite"><option value="gemini-3.6-flash"><option value="gemini-2.5-flash"></datalist></div>
         </div>
