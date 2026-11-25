@@ -46,7 +46,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
 .reg{width:100%;border-collapse:collapse;font-size:13px}
 .reg td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 .reg .tp{white-space:nowrap;font-weight:600}
-.tp.respondió,.tp.retomó{color:var(--brand)}.tp.error,.tp.bloqueada{color:var(--bad)}.tp.ensayo{color:var(--info)}
+.tp.respondió,.tp.retomó,.tp.sigue{color:var(--brand)}.tp.pausa{color:var(--warn)}.tp.error,.tp.bloqueada{color:var(--bad)}.tp.ensayo{color:var(--info)}
 .sim{display:flex;flex-direction:column;gap:8px;background:#f7f8f5;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:160px;max-height:420px;overflow:auto}
 .b{padding:8px 11px;border-radius:10px;max-width:80%;white-space:pre-wrap;word-wrap:break-word}
 .b.c{align-self:flex-start;background:#fff;border:1px solid var(--line)}
@@ -100,6 +100,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
           <button class="modo auto" data-m="automatico"><b>Automático</b><span class="small muted">Responde al cliente como tú, con espera al azar.</span></button>
         </div>
         <div class="estado" id="estado"></div>
+        <div class="help">¿Vas a atender tú un chat? Solo escríbele al cliente: el respaldo se pausa solo en ese chat. Desde Chatwoot también puedes dejar una <b>nota privada</b> con <b>#pausa</b> (no lo toca hasta que digas) o <b>#sigue</b> (lo retoma ya).</div>
       </div>
       <div class="card">
         <div class="row" style="justify-content:space-between"><h2>Actividad reciente</h2><div class="row" style="width:auto"><button id="b-revisar">Revisar ahora</button><button id="b-recargar">↻</button></div></div>
@@ -139,6 +140,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
         <div class="grid2">
           <div><label>Esperar antes de responder (al azar)</label><div class="row"><input id="esp-min" type="number" min="0" max="60"> <span>a</span> <input id="esp-max" type="number" min="0" max="60"> <span>min</span></div></div>
           <div><label>Máximo de respuestas por chat</label><input id="max-resp" type="number" min="1" max="20"><div class="small muted">Después de eso solo te avisa.</div></div>
+          <div><label>Pausa cuando atiendes tú</label><div class="row"><input id="pausa-h" type="number" min="0" max="24"> <span>horas</span></div><div class="small muted">Si escribes en un chat, el respaldo no lo toca por este tiempo. 0 = sin pausa.</div></div>
           <div><label>Solo chats con esta etiqueta (opcional)</label><input id="etiqueta" placeholder="ej. sk_sv_atencion_humana"><div class="small muted">Vacío = todos tus chats asignados.</div></div>
           <div><label>Modelo de Gemini</label><input id="modelo" list="modelos"><datalist id="modelos"><option value="gemini-3.5-flash"><option value="gemini-3.5-flash-lite"><option value="gemini-3.6-flash"><option value="gemini-2.5-flash"></datalist></div>
         </div>
@@ -255,7 +257,7 @@ async function cargar(rellenar = true) {
 function llenar() {
   $("#ficha").value = YO.ficha || ""; $("#estilo").value = YO.estilo || "";
   $("#pais").value = YO.pais; $("#tz").value = YO.tz; $("#siempre").checked = YO.siempre;
-  $("#esp-min").value = YO.espera_min ?? 1; $("#esp-max").value = YO.espera_max ?? 7; $("#max-resp").value = YO.max_respuestas ?? 4;
+  $("#esp-min").value = YO.espera_min ?? 1; $("#esp-max").value = YO.espera_max ?? 7; $("#max-resp").value = YO.max_respuestas ?? 4; $("#pausa-h").value = YO.pausa_horas ?? 2;
   $("#etiqueta").value = YO.etiqueta || ""; $("#modelo").value = YO.modelo || "gemini-3.5-flash"; $("#callmebot").value = YO.callmebot || "";
   $("#gkey").value = ""; $("#gkey").placeholder = YO.tiene_gemini ? "Llave guardada (escribe otra para cambiarla)" : "Pega tu llave de Gemini";
   $("#dias").innerHTML = DIAS.map(([d, n]) => { const r = YO.horario[d]; return `<label style="margin:0;display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-d="${d}" ${r ? "checked" : ""} style="width:auto">${n}</label><input type="time" data-i="${d}" value="${r ? r[0] : "08:00"}"><input type="time" data-f="${d}" value="${r ? r[1] : "18:00"}">`; }).join("");
@@ -274,7 +276,7 @@ $("#b-aprender").onclick = () => ocupado($("#b-aprender"), async () => { const r
 $("#b-g-hor").onclick = () => {
   const horario = {};
   DIAS.forEach(([d]) => { horario[d] = document.querySelector(`[data-d="${d}"]`).checked ? [document.querySelector(`[data-i="${d}"]`).value, document.querySelector(`[data-f="${d}"]`).value] : null; });
-  const datos = { pais: $("#pais").value, tz: $("#tz").value, siempre: $("#siempre").checked, horario, espera_min: $("#esp-min").value, espera_max: $("#esp-max").value, max_respuestas: $("#max-resp").value, etiqueta: $("#etiqueta").value.trim(), modelo: $("#modelo").value.trim() };
+  const datos = { pais: $("#pais").value, tz: $("#tz").value, siempre: $("#siempre").checked, horario, espera_min: $("#esp-min").value, espera_max: $("#esp-max").value, max_respuestas: $("#max-resp").value, pausa_horas: $("#pausa-h").value, etiqueta: $("#etiqueta").value.trim(), modelo: $("#modelo").value.trim() };
   if ($("#gkey").value.trim()) datos.gemini_key = $("#gkey").value.trim();
   if (Number(datos.espera_min) > Number(datos.espera_max)) return toast("La espera mínima no puede ser mayor que la máxima");
   guardar($("#b-g-hor"), datos);

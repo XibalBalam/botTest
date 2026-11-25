@@ -48,6 +48,9 @@ async function esquema(env) {
   ]);
   try { await env.DB.prepare("ALTER TABLE convs ADD COLUMN enviado INTEGER DEFAULT 0").run(); } catch {}
   try { await env.DB.prepare("ALTER TABLE convs ADD COLUMN reenganche INTEGER DEFAULT 0").run(); } catch {}
+  try { await env.DB.prepare("ALTER TABLE convs ADD COLUMN pausa_hasta INTEGER DEFAULT 0").run(); } catch {}
+  try { await env.DB.prepare("ALTER TABLE convs ADD COLUMN enviados TEXT DEFAULT '[]'").run(); } catch {}
+  try { await env.DB.prepare("ALTER TABLE usuarios ADD COLUMN pausa_horas INTEGER DEFAULT 2").run(); } catch {}
   esquemaListo = true;
 }
 
@@ -342,6 +345,9 @@ async function revisarUsuario(env, u, presupuesto, ctxOpc = {}) {
     const delCliente = ult.message_type === 0 && !ult.private;
     // Traspaso: lo último es del bot (mensaje o nota interna), no de una persona del equipo
     const delBot = ult.message_type === 1 && ult.sender_type !== "User" && ult.sender?.type !== "user";
+    // Señal del vendedor con nota privada: #sigue (retomar) o #pausa (no tocar este chat)
+    const comando = ult.private && !delBot ? (norm(ult.content).match(/#(sigue|pausa)\b/) || [])[1] : null;
+    if (comando) { candidatos.push({ c, ult, comando }); continue; }
     if (!delCliente && !delBot) continue;
     const edad = t - (ult.created_at || c.last_activity_at || t);
     if (edad > 12 * 3600) continue; // no revivir chats viejos
@@ -356,11 +362,21 @@ async function revisarUsuario(env, u, presupuesto, ctxOpc = {}) {
   const estados = await env.DB.prepare(`SELECT * FROM convs WHERE user_id = ? AND conv_id IN (${ids.map(() => "?").join(",")})`).bind(u.id, ...ids).all();
   const est = Object.fromEntries((estados.results || []).map((e) => [e.conv_id, e]));
 
-  for (const { c, ult, reenganche } of candidatos) {
+  for (const { c, ult, reenganche, comando } of candidatos) {
     const e = est[c.id] || { ultimo_msg: 0, respuestas: 0 };
     if (e.ultimo_msg >= ult.id) continue;
+    if (comando === "pausa") {
+      // Pausa indefinida de este chat, sin gastar consultas
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO convs (user_id, conv_id, ultimo_msg, pausa_hasta, actualizado) VALUES (?,?,?,?,?) ON CONFLICT (user_id, conv_id) DO UPDATE SET ultimo_msg = excluded.ultimo_msg, pausa_hasta = excluded.pausa_hasta, actualizado = excluded.actualizado`).bind(u.id, c.id, ult.id, ahora() + 30 * 86400, ahora()),
+        await registrar(env, u.id, c.id, "pausa", `${c.meta?.sender?.name || "Cliente"}: en pausa por tu nota #pausa. Escribe #sigue para que retome.`),
+      ]);
+      continue;
+    }
+    if (!comando && (e.pausa_hasta || 0) > ahora()) continue; // estás atendiendo tú este chat
+    if (comando === "sigue") e.tarea = "sigue";
     if (reenganche && e.reenganche) continue; // solo una vez por chat
-    e.tarea = reenganche ? "reenganche" : null;
+    if (!comando) e.tarea = reenganche ? "reenganche" : null;
     if (!presupuesto.tomar(9)) return; // no alcanza para atender este chat completo; sigue el próximo minuto
     await atenderChat(env, u, token, key, c, ult, e, presupuesto);
   }
@@ -390,13 +406,36 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
     const esHumano = (m) => m && (m.sender_type === "User" || m.sender?.type === "user");
     if (esHumano(ultNuestro) && e.actualizado && ultNuestro.id !== e.enviado && (ultNuestro.created_at >= e.actualizado || (e.enviado && ultNuestro.id > e.enviado))) { e.alerta = null; e.respuestas = 0; e.reenganche = 0; }
     const reenganche = e.tarea === "reenganche";
+    const reanudar = e.tarea === "sigue";
+    // ¿El vendedor está atendiendo este chat? (mensajes suyos que no envió el respaldo)
+    let misIds;
+    try { misIds = new Set(JSON.parse(e.enviados || "[]")); } catch { misIds = new Set(); }
+    if (e.enviado) misIds.add(e.enviado);
+    let ultHumano = 0, tsSigue = 0;
+    for (const m of mensajes) {
+      if (m.message_type !== 1 || !esHumano(m)) continue;
+      if (m.private) { if (/#sigue\b/.test(norm(m.content))) tsSigue = Math.max(tsSigue, m.created_at || 0); }
+      else if (!misIds.has(m.id)) ultHumano = Math.max(ultHumano, m.created_at || 0);
+    }
+    const horasPausa = Number(u.pausa_horas ?? 2);
+    if (!reanudar && horasPausa > 0 && ultHumano > tsSigue && ahora() - ultHumano < horasPausa * 3600) {
+      const hasta = ultHumano + horasPausa * 3600;
+      const hh = new Date(hasta * 1000).toLocaleTimeString("es", { timeZone: u.tz, hour: "2-digit", minute: "2-digit" });
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO convs (user_id, conv_id, pausa_hasta, actualizado) VALUES (?,?,?,?) ON CONFLICT (user_id, conv_id) DO UPDATE SET pausa_hasta = excluded.pausa_hasta`).bind(u.id, c.id, hasta, ahora()),
+        await registrar(env, u.id, c.id, "pausa", `${contacto}: estás atendiendo tú; no respondo este chat hasta las ${hh} (o hasta tu nota #sigue).`),
+      ]);
+      return;
+    }
     const emergenciaPalabras = !reenganche && esEmergencia(textoCliente);
     // Para retomar, debe existir algo dicho por el cliente y ninguna respuesta de una persona del equipo
     const hayCliente = mensajes.some((m) => m.message_type === 0);
     const hayHumano = mensajes.some((m) => m.message_type === 1 && !m.private && esHumano(m));
 
     let dec;
-    if (reenganche && (!hayCliente || hayHumano)) {
+    if (reanudar && !pendientes.length) {
+      dec = { accion: "no_responder", mensaje: "", urgencia: "ninguna", motivo: "retomado con #sigue; no hay mensajes pendientes del cliente", resumen: "" };
+    } else if (reenganche && (!hayCliente || hayHumano)) {
       dec = { accion: "no_responder", mensaje: "", urgencia: "ninguna", motivo: hayHumano ? "ya hay respuesta del equipo" : "el cliente no ha escrito nada", resumen: "" };
     } else if (reenganche) {
       dec = await preguntarGemini(env, u, key, transcribir(mensajes, u), null, TAREA_REENGANCHE);
@@ -445,7 +484,7 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
       if (yaAvisado) avisado = true;
       else {
         const icono = dec.urgencia === "emergencia" ? "🚨 EMERGENCIA" : "⭐ Prioridad";
-        avisado = await avisar(env, u, `${icono}${ensayo ? " (ensayo)" : ""}\n${contacto} · chat #${c.id}\n${dec.resumen}\nMotivo: ${dec.motivo}\n${dec.accion === "responder" ? `Se le respondió: "${dec.mensaje}"` : "No se le respondió."}\n${enlace}`, dec.urgencia !== "emergencia" && e.alerta !== "emergencia");
+        avisado = await avisar(env, u, `${icono}${ensayo ? " (ensayo)" : ""}\n${contacto} · chat #${c.id}\n${dec.resumen}\nMotivo: ${dec.motivo}\n${dec.accion === "responder" ? `Se le respondió: "${dec.mensaje}"` : "No se le respondió."}\n${enlace}\nSi entras tú, el respaldo se pausa solo en ese chat. Nota privada #sigue para que retome.`, dec.urgencia !== "emergencia" && e.alerta !== "emergencia");
         if (dec.urgencia === "emergencia" && u.callmebot) avisado = (await llamar(env, u.callmebot, `Emergencia en Chatwoot. ${contacto} reporta: ${dec.resumen}. Revisa el chat ${c.id}.`)) || avisado;
       }
     }
@@ -454,8 +493,8 @@ async function atenderChat(env, u, token, key, c, ult, e, presupuesto) {
       env.DB.prepare(`INSERT INTO convs (user_id, conv_id, ultimo_msg, respuestas, alerta, actualizado, enviado) VALUES (?,?,?,?,?,?,?)
         ON CONFLICT (user_id, conv_id) DO UPDATE SET ultimo_msg = excluded.ultimo_msg, respuestas = excluded.respuestas, alerta = excluded.alerta, actualizado = excluded.actualizado, enviado = excluded.enviado`)
         .bind(u.id, c.id, ult.id, (e.respuestas || 0) + (dec.accion === "responder" && !ensayo ? 1 : 0), e.alerta === "emergencia" ? "emergencia" : avisado ? dec.urgencia : e.alerta || null, ahora(), enviadoId || e.enviado || 0),
-      env.DB.prepare("UPDATE convs SET reenganche = ? WHERE user_id = ? AND conv_id = ?").bind(reenganche ? 1 : e.reenganche || 0, u.id, c.id),
-      await registrar(env, u.id, c.id, dec.accion === "responder" ? (ensayo ? "ensayo" : reenganche ? "retomó" : "respondió") : "sin respuesta",
+      env.DB.prepare("UPDATE convs SET reenganche = ?, pausa_hasta = 0, enviados = ? WHERE user_id = ? AND conv_id = ?").bind(reenganche ? 1 : e.reenganche || 0, JSON.stringify([...misIds, ...(enviadoId ? [enviadoId] : [])].slice(-30)), u.id, c.id),
+      await registrar(env, u.id, c.id, dec.accion === "responder" ? (ensayo ? "ensayo" : reenganche ? "retomó" : "respondió") : reanudar ? "sigue" : "sin respuesta",
         `${contacto}: "${textoCliente.slice(0, 200)}" → ${dec.accion === "responder" ? `"${dec.mensaje}"` : "(no respondió)"} · urgencia: ${dec.urgencia}${dec.motivo ? " (" + dec.motivo + ")" : ""}`),
     );
   } catch (err) {
@@ -651,7 +690,7 @@ function publico(u) {
   try { if (u.horario) horario = JSON.parse(u.horario); } catch {}
   return {
     email: u.email, nombre: u.nombre, modo: u.modo, siempre: !!u.siempre, pais: u.pais, tz: u.tz, horario, espera_min: u.espera_min, espera_max: u.espera_max,
-    etiqueta: u.etiqueta, max_respuestas: u.max_respuestas, ficha: u.ficha, estilo: u.estilo, modelo: u.modelo,
+    etiqueta: u.etiqueta, max_respuestas: u.max_respuestas, pausa_horas: u.pausa_horas ?? 2, ficha: u.ficha, estilo: u.estilo, modelo: u.modelo,
     tiene_gemini: !!u.gemini_key, telegram: !!u.tg_chat_id, callmebot: u.callmebot || "", fuera_de_horario: fueraDeHorario(u),
   };
 }
@@ -744,7 +783,7 @@ async function api(req, env, url) {
     if (typeof b.siempre === "boolean") campos.siempre = b.siempre ? 1 : 0;
     txt("pais", 40); txt("tz", 60); txt("etiqueta", 80); txt("ficha", 12000); txt("estilo", 8000); txt("modelo", 80); txt("callmebot", 60);
     if (b.horario && typeof b.horario === "object") campos.horario = JSON.stringify(b.horario);
-    for (const k of ["espera_min", "espera_max", "max_respuestas"]) if (Number.isFinite(Number(b[k])) && b[k] !== "" && b[k] !== null && b[k] !== undefined) campos[k] = Math.max(0, Math.min(60, Math.round(Number(b[k]))));
+    for (const k of ["espera_min", "espera_max", "max_respuestas", "pausa_horas"]) if (Number.isFinite(Number(b[k])) && b[k] !== "" && b[k] !== null && b[k] !== undefined) campos[k] = Math.max(0, Math.min(60, Math.round(Number(b[k]))));
     if (typeof b.gemini_key === "string" && b.gemini_key.trim()) campos.gemini_key = await cifrar(env, b.gemini_key.trim());
     if (campos.tz) { try { new Intl.DateTimeFormat("en", { timeZone: campos.tz }); } catch { return json({ error: "Zona horaria no válida." }, 400); } }
     if (campos.modo && campos.modo !== "apagado" && !campos.gemini_key && !u.gemini_key) return json({ error: "Primero guarda tu llave de Gemini." }, 400);
