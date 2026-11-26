@@ -54,6 +54,7 @@ async function esquema(env) {
   try { await env.DB.prepare("ALTER TABLE convs ADD COLUMN fallos INTEGER DEFAULT 0").run(); } catch {}
   try { await env.DB.prepare("ALTER TABLE convs ADD COLUMN reintento_en INTEGER DEFAULT 0").run(); } catch {}
   try { await env.DB.prepare("ALTER TABLE usuarios ADD COLUMN groq_key TEXT").run(); } catch {}
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS audios (user_id INTEGER, att_id INTEGER, conv_id INTEGER, url TEXT, texto TEXT, ts INTEGER, PRIMARY KEY (user_id, att_id))`).run();
   esquemaListo = true;
 }
 
@@ -296,7 +297,7 @@ function leerJSON(txt) {
 // ───────────────────────── Groq (respaldo si Gemini falla) ─────────────────────────
 const MODELOS_GROQ = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile"];
 
-async function llamarGroq(env, key, mensajes) {
+async function llamarGroq(env, key, cuerpo) {
   const base = (env.GROQ_BASE || "https://api.groq.com").replace(/\/+$/, "");
   let ultimo = "", transitorio = false;
   for (const modelo of MODELOS_GROQ) {
@@ -304,7 +305,7 @@ async function llamarGroq(env, key, mensajes) {
     try {
       r = await fetch(`${base}/openai/v1/chat/completions`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model: modelo, messages: mensajes, temperature: 0.4, max_tokens: 4096, response_format: { type: "json_object" } }),
+        body: JSON.stringify({ model: modelo, ...cuerpo }),
         signal: AbortSignal.timeout(40000),
       });
     } catch { ultimo = "Groq no respondió a tiempo"; transitorio = true; continue; }
@@ -322,11 +323,13 @@ async function llamarGroq(env, key, mensajes) {
 
 // Groq no escucha audio en el chat: se transcribe primero con Whisper de Groq
 async function transcribirAudioGroq(env, key, audio) {
+  return whisperGroq(env, key, Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0)), audio.mime);
+}
+async function whisperGroq(env, key, bin, mime) {
   try {
     const base = (env.GROQ_BASE || "https://api.groq.com").replace(/\/+$/, "");
-    const bin = Uint8Array.from(atob(audio.data), (c) => c.charCodeAt(0));
     const fd = new FormData();
-    fd.append("file", new Blob([bin], { type: audio.mime }), "audio." + (audio.mime.split("/")[1] || "ogg"));
+    fd.append("file", new Blob([bin], { type: mime }), "audio." + ((mime.split("/")[1] || "ogg").split(";")[0]));
     fd.append("model", "whisper-large-v3-turbo");
     fd.append("language", "es");
     const r = await fetch(`${base}/openai/v1/audio/transcriptions`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd, signal: AbortSignal.timeout(30000) });
@@ -343,7 +346,7 @@ async function preguntarGroq(env, u, key, transcripcion, audio, tarea) {
     texto += dicho ? `\n\nAudio más reciente del cliente (transcrito): "${dicho}"` : "\n\nEl cliente envió un audio que no se pudo escuchar.";
   }
   const sistema = instrucciones(u, env) + `\n\nFORMATO: responde con un objeto JSON con exactamente estas claves: "accion" ("responder" o "no_responder"), "mensaje" (texto exacto para el cliente, vacío si no_responder), "urgencia" ("ninguna", "prioridad" o "emergencia"), "motivo" (pocas palabras) y "resumen" (una línea para el vendedor).`;
-  const d = await llamarGroq(env, key, [{ role: "system", content: sistema }, { role: "user", content: texto }]);
+  const d = await llamarGroq(env, key, { messages: [{ role: "system", content: sistema }, { role: "user", content: texto }], temperature: 0.4, max_tokens: 4096, response_format: { type: "json_object" } });
   const out = leerJSON(String(d.choices?.[0]?.message?.content || "").trim());
   if (!out) { const e = new Error("Groq devolvió una respuesta que no se pudo leer."); e.transitorio = true; throw e; }
   return normalizarDecision(out);
@@ -736,8 +739,49 @@ async function herramientaAsistente(env, u, token, nombre, a, presupuesto) {
   return "Herramienta desconocida.";
 }
 
+// Herramientas del asistente en el formato de Groq (OpenAI)
+function aFormatoGroq(s) {
+  if (!s || typeof s !== "object" || Array.isArray(s)) return s;
+  const o = {};
+  for (const [k, v] of Object.entries(s)) {
+    if (k === "type") o[k] = String(v).toLowerCase();
+    else if (k === "properties") o[k] = Object.fromEntries(Object.entries(v).map(([a, b]) => [a, aFormatoGroq(b)]));
+    else o[k] = aFormatoGroq(v);
+  }
+  return o;
+}
+const HERRAMIENTAS_GROQ = HERRAMIENTAS_ASISTENTE[0].functionDeclarations.map((f) => ({ type: "function", function: { name: f.name, description: f.description, parameters: aFormatoGroq(f.parameters) } }));
+
+function describirPaso(nombre, args) {
+  return nombre + (args?.id ? " #" + args.id : args?.texto ? ` "${args.texto}"` : "");
+}
+
+async function asistenteGroq(env, u, key, token, sistema, historial, presupuesto) {
+  const msgs = [{ role: "system", content: sistema }, ...historial.slice(-10).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 4000) }))];
+  const pasos = [];
+  for (let vuelta = 0; vuelta < 6; vuelta++) {
+    if (!presupuesto.tomar(2)) break;
+    const d = await llamarGroq(env, key, { messages: msgs, tools: HERRAMIENTAS_GROQ, tool_choice: "auto", temperature: 0.3, max_tokens: 4096 });
+    const m = d.choices?.[0]?.message || {};
+    const llamadas = m.tool_calls || [];
+    if (!llamadas.length) return { respuesta: String(m.content || "").trim() || "No obtuve respuesta, intenta de nuevo.", pasos, via: "Groq" };
+    msgs.push({ role: "assistant", content: m.content || "", tool_calls: llamadas });
+    for (const tc of llamadas) {
+      let args = {};
+      try { args = JSON.parse(tc.function?.arguments || "{}") || {}; } catch {}
+      let salida;
+      try { salida = await herramientaAsistente(env, u, token, tc.function?.name, args, presupuesto); }
+      catch (err) { salida = "Error: " + err.message; }
+      pasos.push(describirPaso(tc.function?.name, args));
+      msgs.push({ role: "tool", tool_call_id: tc.id, content: String(salida).slice(0, 15000) });
+    }
+  }
+  return { respuesta: "Revisé varios chats pero no alcancé a terminar. Haz una pregunta más concreta (por ejemplo, sobre un chat o un tema).", pasos, via: "Groq" };
+}
+
 async function asistente(env, u, historial) {
   const key = await descifrar(env, u.gemini_key);
+  const keyGroq = u.groq_key ? await descifrar(env, u.groq_key) : "";
   const token = await descifrar(env, u.cw_token);
   const presupuesto = crearPresupuesto(38);
   const h = horaLocal(u.tz);
@@ -757,7 +801,15 @@ Reglas:
     if (!presupuesto.tomar(2)) break;
     let d;
     try { ({ d } = await llamarGemini(env, u, key, { systemInstruction: { parts: [{ text: sistema }] }, contents, tools: HERRAMIENTAS_ASISTENTE, generationConfig: { temperature: 0.3, maxOutputTokens: 8192 } })); }
-    catch (err) { throw new Error(err.transitorio ? "Gemini está saturado en este momento; intenta de nuevo en un minuto." : err.message); }
+    catch (err) {
+      // Gemini falló: se repite la consulta completa con Groq
+      if (keyGroq) {
+        presupuesto.tomar(6);
+        try { return await asistenteGroq(env, u, keyGroq, token, sistema, historial, presupuesto); }
+        catch (eq) { throw new Error(`Ni Gemini ni Groq respondieron (${err.message} · ${eq.message}). Intenta de nuevo en un minuto.`); }
+      }
+      throw new Error(err.transitorio ? "Gemini está saturado en este momento; intenta de nuevo en un minuto. (Pon tu llave de Groq para tener respaldo.)" : err.message);
+    }
     const cand = d.candidates?.[0];
     const parts = cand?.content?.parts || [];
     const llamadas = parts.filter((p) => p.functionCall);
@@ -772,12 +824,138 @@ Reglas:
       let salida;
       try { salida = await herramientaAsistente(env, u, token, fc.name, fc.args || {}, presupuesto); }
       catch (err) { salida = "Error: " + err.message; }
-      pasos.push(fc.name + (fc.args?.id ? " #" + fc.args.id : fc.args?.texto ? ` "${fc.args.texto}"` : ""));
+      pasos.push(describirPaso(fc.name, fc.args));
       respuestas.push({ functionResponse: { ...(fc.id ? { id: fc.id } : {}), name: fc.name, response: { resultado: String(salida).slice(0, 15000) } } });
     }
     contents.push({ role: "user", parts: respuestas });
   }
   return { respuesta: "Revisé varios chats pero no alcancé a terminar. Haz una pregunta más concreta (por ejemplo, sobre un chat o un tema).", pasos };
+}
+
+// ───────────────────────── reporte para evaluar al vendedor ─────────────────────────
+function fechaLarga(ts, tz) {
+  return new Date((ts || 0) * 1000).toLocaleString("es", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+}
+function duracion(seg) {
+  if (seg < 60) return `${seg} s`;
+  if (seg < 3600) return `${Math.round(seg / 60)} min`;
+  if (seg < 172800) return `${(seg / 3600).toFixed(1)} h`;
+  return `${Math.round(seg / 86400)} días`;
+}
+
+// Una página de chats (25), del más reciente al más viejo
+async function reporteLista(env, u, token, b) {
+  const pagina = Math.max(1, Number(b.pagina) || 1);
+  const q = new URLSearchParams({ assignee_type: b.todos ? "all" : "me", status: "all", page: String(pagina) });
+  const r = await cw(env, u, token, "GET", `/conversations?${q}`, null);
+  const convs = r.data?.payload || [];
+  const desde = Number(b.desde) || 0, hasta = Number(b.hasta) || ahora();
+  const chats = convs.filter((c) => (c.last_activity_at || 0) >= desde && (c.created_at || c.timestamp || 0) <= hasta).map((c) => ({ id: c.id, nombre: c.meta?.sender?.name || "sin nombre" }));
+  const masViejo = Math.min(...convs.map((c) => c.last_activity_at || 0));
+  return { chats, fin: convs.length < 25 || masViejo < desde, revisados: convs.length };
+}
+
+// Un chat completo en texto, con notas internas y marcas {{AUDIO:id}} para los audios por transcribir
+async function reporteChat(env, u, token, id) {
+  const c = await cw(env, u, token, "GET", `/conversations/${id}`, null);
+  let mensajes = [];
+  let antes = null;
+  for (let p = 0; p < 15; p++) {
+    const mr = await cw(env, u, token, "GET", `/conversations/${id}/messages${antes ? `?before=${antes}` : ""}`, null);
+    const lote = mr.payload || [];
+    const nuevos = lote.filter((m) => !mensajes.some((x) => x.id === m.id));
+    if (!nuevos.length) break;
+    mensajes = [...nuevos, ...mensajes];
+    antes = Math.min(...nuevos.map((m) => m.id));
+    if (lote.length < 20) break;
+  }
+  mensajes.sort((a, b) => a.id - b.id);
+
+  // Mensajes que mandó el respaldo automático en nombre del vendedor
+  const est = await env.DB.prepare("SELECT enviados, enviado FROM convs WHERE user_id = ? AND conv_id = ?").bind(u.id, id).first();
+  let delRespaldo = new Set();
+  try { delRespaldo = new Set(JSON.parse(est?.enviados || "[]")); } catch {}
+  if (est?.enviado) delRespaldo.add(est.enviado);
+
+  // Audios: transcripciones guardadas de reportes anteriores
+  const audios = [];
+  for (const m of mensajes) for (const a of m.attachments || []) if (a.file_type === "audio" && a.data_url) audios.push({ att: a.id, url: a.data_url });
+  const guardadas = {};
+  if (audios.length) {
+    const ids = audios.map((x) => x.att);
+    for (let i = 0; i < ids.length; i += 50) {
+      const r = await env.DB.prepare(`SELECT att_id, texto FROM audios WHERE user_id = ? AND att_id IN (${ids.slice(i, i + 50).map(() => "?").join(",")})`).bind(u.id, ...ids.slice(i, i + 50)).all();
+      for (const x of r.results || []) if (x.texto) guardadas[x.att_id] = x.texto;
+    }
+    const nuevas = audios.filter((x) => !guardadas[x.att]);
+    if (nuevas.length) await env.DB.batch(nuevas.map((x) => env.DB.prepare("INSERT INTO audios (user_id, att_id, conv_id, url, ts) VALUES (?,?,?,?,?) ON CONFLICT (user_id, att_id) DO UPDATE SET url = excluded.url").bind(u.id, x.att, id, x.url, ahora())));
+  }
+  const pendientes = audios.filter((x) => !guardadas[x.att]).map((x) => x.att);
+
+  const esHumano = (m) => m.sender_type === "User" || m.sender?.type === "user";
+  const lineas = [];
+  let primerCliente = 0, primeraRespuesta = 0, respuestasVendedor = 0, delCliente = 0;
+  for (const m of mensajes) {
+    const f = fechaLarga(m.created_at, u.tz);
+    if (m.message_type === 2 || m.message_type === 3) { if (m.content) lineas.push(`[${f}] · sistema: ${m.content.replace(/\s+/g, " ").slice(0, 200)}`); continue; }
+    let quien;
+    if (m.private) quien = `NOTA INTERNA de ${m.sender?.name || (esHumano(m) ? "agente" : "bot")}`;
+    else if (m.message_type === 0) quien = "CLIENTE";
+    else if (delRespaldo.has(m.id)) quien = `${(m.sender?.name || u.nombre).toUpperCase()} (enviado por el respaldo automático)`;
+    else if (esHumano(m)) quien = m.sender?.id === u.cw_user_id ? `${(m.sender?.name || u.nombre).toUpperCase()} (vendedor)` : `${(m.sender?.name || "AGENTE").toUpperCase()} (otro agente)`;
+    else quien = "BOT";
+    const partes = [];
+    if (m.content) partes.push(m.content.trim());
+    for (const a of m.attachments || []) {
+      if (a.file_type === "audio") partes.push(guardadas[a.id] ? `[AUDIO] «${guardadas[a.id]}»` : `[AUDIO] «{{AUDIO:${a.id}}}»`);
+      else partes.push(`[${(a.file_type || "archivo").toUpperCase()}]`);
+    }
+    lineas.push(`[${f}] ${quien}: ${partes.join(" ") || "(vacío)"}`);
+    if (!m.private && m.message_type === 0) { delCliente++; if (!primerCliente) primerCliente = m.created_at; }
+    if (!m.private && m.message_type === 1 && esHumano(m) && !delRespaldo.has(m.id)) { respuestasVendedor++; if (primerCliente && !primeraRespuesta) primeraRespuesta = m.created_at; }
+  }
+  const k = c.meta?.sender || {};
+  const ult = mensajes.filter((m) => !m.private && (m.message_type === 0 || m.message_type === 1)).pop();
+  const datos = [
+    `## Chat #${c.id} · ${k.name || "sin nombre"}`,
+    `- Teléfono: ${k.phone_number || "-"} · Canal: ${c.meta?.channel || c.channel || "-"}`,
+    `- Estado: ${ESTADOS[c.status] || c.status} · Etiquetas: ${(c.labels || []).join(", ") || "-"} · Asignado a: ${c.meta?.assignee?.name || "nadie"}`,
+    `- Primer mensaje: ${fechaLarga(mensajes[0]?.created_at || c.created_at, u.tz)} · Última actividad: ${fechaLarga(c.last_activity_at, u.tz)}`,
+    `- Mensajes del cliente: ${delCliente} · Respuestas escritas por personas del equipo: ${respuestasVendedor} · Audios: ${audios.length}`,
+    `- Primera respuesta de una persona: ${primeraRespuesta ? duracion(primeraRespuesta - primerCliente) + " después del primer mensaje del cliente" : "no hubo"}`,
+    `- Último en escribir: ${ult ? (ult.message_type === 0 ? "el cliente" : esHumano(ult) ? "el equipo" : "el bot") : "-"}`,
+    `- Enlace: ${cwBase(env)}/app/accounts/${u.account_id}/conversations/${c.id}`,
+  ];
+  return { md: `${datos.join("\n")}\n\n${lineas.join("\n")}`, audios_pendientes: pendientes };
+}
+
+async function transcribirGemini(env, u, key, bin, mime) {
+  const { d } = await llamarGemini(env, u, key, {
+    contents: [{ role: "user", parts: [{ text: "Transcribe este audio de WhatsApp tal cual, en español. Devuelve solo el texto dicho, sin comentarios." }, { inline_data: { mime_type: mime, data: b64(bin) } }] }],
+    generationConfig: { temperature: 0, maxOutputTokens: 4096 },
+  });
+  return (d.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || "").join("").trim();
+}
+
+// Transcribe un audio: primero Groq (Whisper, gratuito), si falla Gemini
+async function reporteAudio(env, u, attId) {
+  const fila = await env.DB.prepare("SELECT url, texto FROM audios WHERE user_id = ? AND att_id = ?").bind(u.id, attId).first();
+  if (!fila) return { texto: "(audio no encontrado)" };
+  if (fila.texto) return { texto: fila.texto };
+  let r;
+  try { r = await fetch(fila.url); } catch { return { texto: "(no se pudo descargar el audio)" }; }
+  if (!r.ok) return { texto: "(no se pudo descargar el audio)" };
+  const bin = new Uint8Array(await r.arrayBuffer());
+  const mime = (r.headers.get("Content-Type") || "audio/ogg").split(";")[0];
+  if (bin.byteLength > 24 * 1024 * 1024) return { texto: "(audio demasiado largo para transcribir)" };
+  let texto = null, via = "";
+  if (u.groq_key) { texto = await whisperGroq(env, await descifrar(env, u.groq_key), bin, mime.startsWith("audio/") ? mime : "audio/ogg"); via = "Groq"; }
+  if (!texto && u.gemini_key && bin.byteLength <= 8 * 1024 * 1024) {
+    try { texto = await transcribirGemini(env, u, await descifrar(env, u.gemini_key), bin, mime.startsWith("audio/") ? mime : "audio/ogg"); via = "Gemini"; } catch {}
+  }
+  if (!texto) return { texto: "(no se pudo transcribir: ni Groq ni Gemini respondieron)" };
+  await env.DB.prepare("UPDATE audios SET texto = ?, ts = ? WHERE user_id = ? AND att_id = ?").bind(texto.slice(0, 8000), ahora(), u.id, attId).run();
+  return { texto, via };
 }
 
 // ───────────────────────── API web ─────────────────────────
@@ -899,6 +1077,14 @@ async function api(req, env, url) {
     if (!u.gemini_key) return json({ error: "Primero guarda tu llave de Gemini en Horario y reglas." }, 400);
     const b = await req.json().catch(() => ({}));
     return json(await asistente(env, u, Array.isArray(b.historial) ? b.historial : []));
+  }
+
+  if (ruta.startsWith("/api/reporte/") && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const token = await descifrar(env, u.cw_token);
+    if (ruta === "/api/reporte/lista") return json(await reporteLista(env, u, token, b));
+    if (ruta === "/api/reporte/chat") return json(await reporteChat(env, u, token, Number(b.id)));
+    if (ruta === "/api/reporte/audio") return json(await reporteAudio(env, u, Number(b.id)));
   }
 
   if (ruta === "/api/aprender" && req.method === "POST") return json({ estilo: await aprenderEstilo(env, u) });

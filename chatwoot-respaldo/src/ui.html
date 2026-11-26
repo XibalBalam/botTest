@@ -62,6 +62,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
 @keyframes s{to{transform:rotate(360deg)}}
 .help{background:var(--info-2);border-radius:10px;padding:10px 12px;font-size:13px;margin-top:10px}
 .help ol{margin:4px 0 0;padding-left:18px}
+.barra{height:8px;background:#eef0ec;border-radius:99px;overflow:hidden;margin-top:12px}.barra i{display:block;height:100%;width:0;background:var(--brand);transition:width .3s}
 @media(max-width:700px){.modos,.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -83,6 +84,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
   <nav>
     <button data-v="inicio" class="on">Inicio</button>
     <button data-v="asistente">Asistente</button>
+    <button data-v="reporte">Reporte</button>
     <button data-v="ficha">Ficha y estilo</button>
     <button data-v="horario">Horario y reglas</button>
     <button data-v="avisos">Avisos</button>
@@ -192,6 +194,25 @@ main{max-width:920px;margin:0 auto;padding:18px}
           <button class="chip">Analiza mi último chat y dime qué pude hacer mejor</button>
         </div>
         <form class="row" id="f-asis" style="margin-top:10px"><input id="asis-in" placeholder="Ej.: ¿en qué quedó el chat #5501?"><button class="pri" style="white-space:nowrap">Preguntar</button><button type="button" id="asis-clear">Limpiar</button></form>
+      </div>
+    </div>
+
+    <!-- REPORTE -->
+    <div data-p="reporte" class="hide">
+      <div class="card">
+        <h2>Reporte de mis chats</h2>
+        <div class="muted small">Arma un archivo con cada chat completo: mensajes del cliente, tus respuestas, las del bot y del respaldo, <b>notas internas</b> y <b>audios transcritos</b>. Descárgalo y pásaselo a otra IA (ChatGPT, Claude, Gemini) para que evalúe cómo vendes. Solo lee, no cambia nada en Chatwoot.</div>
+        <div class="grid2">
+          <div><label>Desde</label><input type="date" id="rp-desde"></div>
+          <div><label>Hasta</label><input type="date" id="rp-hasta"></div>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="rp-audios" checked style="width:auto"> Transcribir los audios (más lento la primera vez; luego quedan guardados)</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin-top:4px"><input type="checkbox" id="rp-todos" style="width:auto"> Incluir chats que no están asignados a mí (los que puedo ver)</label>
+        <div class="small muted" style="margin-top:6px">Entran los chats que tuvieron actividad en esas fechas, con toda su conversación para no perder el contexto.</div>
+        <div class="save" style="justify-content:flex-start"><button class="pri" id="rp-go">Generar reporte</button><button id="rp-stop" class="hide">Detener</button></div>
+        <div class="barra hide" id="rp-barra"><i></i></div>
+        <div class="small muted" id="rp-st" style="margin-top:6px"></div>
+        <div class="save hide" id="rp-listo" style="justify-content:flex-start"><button class="pri" id="rp-bajar">Descargar archivo</button><button id="rp-copiar">Copiar todo</button></div>
       </div>
     </div>
 
@@ -323,7 +344,7 @@ function formatoAsis(t) {
     .replace(/#(\d{2,9})\b/g, (m, id) => `<a href="${esc(base)}${id}" target="_blank">#${id}</a>`);
 }
 function pintarAsis(extra) {
-  $("#asis").innerHTML = (ASIS.length ? ASIS.map((m) => m.role === "user" ? `<div class="b u">${esc(m.content)}</div>` : `<div class="b a">${formatoAsis(m.content)}${m.pasos?.length ? `<div class="small muted" style="margin-top:6px">Consultó: ${esc(m.pasos.join(", "))}</div>` : ""}</div>`).join("") : '<div class="b meta">Escribe tu pregunta o elige una sugerencia.</div>') + (extra || "");
+  $("#asis").innerHTML = (ASIS.length ? ASIS.map((m) => m.role === "user" ? `<div class="b u">${esc(m.content)}</div>` : `<div class="b a">${formatoAsis(m.content)}${m.pasos?.length ? `<div class="small muted" style="margin-top:6px">Consultó: ${esc(m.pasos.join(", "))}${m.via ? " · respondió " + esc(m.via) : ""}</div>` : ""}</div>`).join("") : '<div class="b meta">Escribe tu pregunta o elige una sugerencia.</div>') + (extra || "");
   $("#asis").scrollTop = 1e9;
 }
 async function preguntarAsis(texto) {
@@ -332,13 +353,76 @@ async function preguntarAsis(texto) {
   pintarAsis('<div class="b meta"><span class="spin"></span> Revisando tus chats…</div>');
   try {
     const r = await call("POST", "/api/asistente", { historial: ASIS.map(({ role, content }) => ({ role, content })) });
-    ASIS.push({ role: "assistant", content: r.respuesta, pasos: r.pasos });
+    ASIS.push({ role: "assistant", content: r.respuesta, pasos: r.pasos, via: r.via });
     pintarAsis();
   } catch (e) { ASIS.pop(); pintarAsis(`<div class="b meta">⚠️ ${esc(e.message)}</div>`); }
 }
 $("#f-asis").onsubmit = (e) => { e.preventDefault(); preguntarAsis($("#asis-in").value); };
 document.querySelectorAll("#asis-sug .chip").forEach((c) => c.onclick = () => preguntarAsis(c.textContent));
 $("#asis-clear").onclick = () => { ASIS = []; pintarAsis(); };
+
+// Reporte
+let RP = { texto: "", parar: false, nombre: "" };
+(() => { const h = new Date(), d = new Date(Date.now() - 7 * 86400000); const f = (x) => new Date(x - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10); $("#rp-hasta").value = f(h); $("#rp-desde").value = f(d); })();
+function rpEstado(t, pct) { $("#rp-st").textContent = t; if (pct != null) $("#rp-barra i").style.width = Math.round(pct * 100) + "%"; }
+const INSTRUCCIONES_RP = (n, desde, hasta, total) => `# Reporte de chats de ${n}
+Periodo: ${desde} al ${hasta} · Chats: ${total} · Generado: ${new Date().toLocaleString("es")}
+
+## Instrucciones para la IA que lo revise
+Eres un coach de ventas. Abajo están las conversaciones de WhatsApp de ${n}, asesor(a) de ventas de GPS y DashCams, tal como pasaron en Chatwoot.
+- "CLIENTE" es el prospecto. "(vendedor)" es ${n}. "BOT" es el bot automático de entrada. "(enviado por el respaldo automático)" lo escribió una IA fuera de horario en nombre del vendedor: no lo cuentes como trabajo del vendedor, pero sí revisa si el vendedor dio seguimiento después.
+- "NOTA INTERNA" son comentarios del equipo que el cliente no ve. "[AUDIO] «…»" es la transcripción de un audio.
+Evalúa chat por chat y luego en general: rapidez de respuesta, si entendió la necesidad antes de dar precios, claridad de la oferta, manejo de objeciones (precio caro, "lo voy a pensar"), si cerró con una pregunta o siguiente paso, seguimiento a chats que se enfriaron, y oportunidades perdidas. Da una calificación del 1 al 10 por chat, los 3 errores más repetidos y ejemplos concretos de qué pudo responder mejor.
+
+---
+`;
+$("#rp-go").onclick = async () => {
+  const d = $("#rp-desde").value, h = $("#rp-hasta").value;
+  if (!d || !h || d > h) return toast("Revisa las fechas");
+  const desde = Math.floor(new Date(d + "T00:00:00").getTime() / 1000), hasta = Math.floor(new Date(h + "T23:59:59").getTime() / 1000);
+  RP = { texto: "", parar: false, nombre: `reporte-chats-${d}_a_${h}.md` };
+  $("#rp-go").disabled = true; $("#rp-stop").classList.remove("hide"); $("#rp-listo").classList.add("hide"); $("#rp-barra").classList.remove("hide");
+  const todos = $("#rp-todos").checked, conAudios = $("#rp-audios").checked;
+  try {
+    const chats = [];
+    for (let p = 1; p <= 80 && !RP.parar; p++) {
+      rpEstado(`Buscando chats… (${chats.length} encontrados)`, 0.02);
+      const r = await call("POST", "/api/reporte/lista", { desde, hasta, todos, pagina: p });
+      chats.push(...r.chats.filter((c) => !chats.some((x) => x.id === c.id)));
+      if (r.fin) break;
+    }
+    if (!chats.length) { rpEstado("No hay chats con actividad en esas fechas."); return; }
+    const partes = [];
+    let nAudios = 0;
+    for (let i = 0; i < chats.length && !RP.parar; i++) {
+      const c = chats[i];
+      rpEstado(`Chat ${i + 1} de ${chats.length}: #${c.id} ${c.nombre}`, (i + 0.1) / chats.length);
+      let md;
+      try {
+        const r = await call("POST", "/api/reporte/chat", { id: c.id });
+        md = r.md;
+        for (let j = 0; j < r.audios_pendientes.length && !RP.parar; j++) {
+          const id = r.audios_pendientes[j];
+          let t = "(audio sin transcribir)";
+          if (conAudios) {
+            rpEstado(`Chat ${i + 1} de ${chats.length}: #${c.id} · escuchando audio ${j + 1} de ${r.audios_pendientes.length}`, (i + 0.5) / chats.length);
+            try { t = (await call("POST", "/api/reporte/audio", { id })).texto; nAudios++; } catch (e) { t = "(no se pudo transcribir: " + e.message + ")"; }
+          }
+          md = md.split(`{{AUDIO:${id}}}`).join(t);
+        }
+        md = md.replace(/\{\{AUDIO:\d+\}\}/g, "(audio sin transcribir)");
+      } catch (e) { md = `## Chat #${c.id} · ${c.nombre}\n(no se pudo leer este chat: ${e.message})`; }
+      partes.push(md);
+    }
+    RP.texto = INSTRUCCIONES_RP(YO.nombre, d, h, partes.length) + partes.join("\n\n---\n\n") + "\n";
+    rpEstado(`${RP.parar ? "Detenido. " : "Listo. "}${partes.length} chats${conAudios ? `, ${nAudios} audios transcritos ahora` : ""} · ${(RP.texto.length / 1024).toFixed(0)} KB`, 1);
+    $("#rp-listo").classList.remove("hide");
+  } catch (e) { rpEstado("⚠️ " + e.message); }
+  finally { $("#rp-go").disabled = false; $("#rp-stop").classList.add("hide"); }
+};
+$("#rp-stop").onclick = () => { RP.parar = true; rpEstado("Deteniendo…"); };
+$("#rp-bajar").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([RP.texto], { type: "text/markdown;charset=utf-8" })); a.download = RP.nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
+$("#rp-copiar").onclick = async () => { try { await navigator.clipboard.writeText(RP.texto); toast("Copiado"); } catch { toast("No se pudo copiar; usa Descargar"); } };
 
 cargar().catch(() => mostrarLogin());
 setInterval(() => { if (!$("#app").classList.contains("hide") && document.visibilityState === "visible" && !document.activeElement.matches("textarea,input")) cargar(false).catch(() => {}); }, 60000);
