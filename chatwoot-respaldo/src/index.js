@@ -189,20 +189,23 @@ const MODELOS_RESPALDO = ["gemini-3.5-flash-lite", "gemini-2.5-flash"];
 const TRANSITORIO = new Set([408, 429, 500, 502, 503, 504, 520, 522, 524]);
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
-async function llamarGemini(env, u, key, cuerpo) {
+// opc: { espera (ms por intento), intentos (por modelo), modelos (cuántos probar), aviso (función para contar el avance) }
+async function llamarGemini(env, u, key, cuerpo, opc = {}) {
   const base = (env.GEMINI_BASE || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
   const principal = u.modelo || "gemini-3.5-flash";
-  const modelos = [principal, ...MODELOS_RESPALDO.filter((m) => m !== principal)];
+  const modelos = [principal, ...MODELOS_RESPALDO.filter((m) => m !== principal)].slice(0, opc.modelos || 3);
+  const intentos = opc.intentos || 2, espera = opc.espera || 50000, aviso = opc.aviso || (() => {});
   let ultimo = "", transitorio = false;
-  for (const modelo of modelos) {
-    for (let intento = 0; intento < 2; intento++) {
+  for (const [i, modelo] of modelos.entries()) {
+    if (i > 0) aviso(`${ultimo}; probando con ${modelo}…`);
+    for (let intento = 0; intento < intentos; intento++) {
       let r;
       try {
         r = await fetch(`${base}/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
           method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(50000),
+          body: JSON.stringify(cuerpo), signal: AbortSignal.timeout(espera),
         });
-      } catch { ultimo = "Gemini no respondió a tiempo"; transitorio = true; continue; }
+      } catch { ultimo = `Gemini no respondió en ${Math.round(espera / 1000)} s`; transitorio = true; continue; }
       if (r.ok) return { d: await r.json(), modelo };
       const t = (await r.text()).slice(0, 200);
       if (r.status === 400 && /API key/i.test(t)) throw new Error("La llave de Gemini no es válida.");
@@ -303,10 +306,11 @@ function leerJSON(txt) {
 // ───────────────────────── Groq (respaldo si Gemini falla) ─────────────────────────
 const MODELOS_GROQ = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile"];
 
-async function llamarGroq(env, key, cuerpo) {
+async function llamarGroq(env, key, cuerpo, aviso = () => {}) {
   const base = (env.GROQ_BASE || "https://api.groq.com").replace(/\/+$/, "");
   let ultimo = "", transitorio = false;
-  for (const modelo of MODELOS_GROQ) {
+  for (const [i, modelo] of MODELOS_GROQ.entries()) {
+    if (i > 0) aviso(`${ultimo}; probando con otro modelo de Groq…`);
     let r;
     try {
       r = await fetch(`${base}/openai/v1/chat/completions`, {
@@ -840,13 +844,23 @@ const HERRAMIENTAS_GROQ = HERRAMIENTAS_ASISTENTE[0].functionDeclarations.map((f)
 function describirPaso(nombre, args) {
   return nombre + (args?.id ? " #" + args.id : args?.texto ? ` "${args.texto}"` : "");
 }
+// Lo que se le muestra al vendedor mientras trabaja
+function pasoHumano(nombre, args) {
+  if (nombre === "pendientes") return "Revisando tus chats abiertos para ver quién espera respuesta…";
+  if (nombre === "listar_chats") return `Listando chats${args?.etiqueta ? ` con la etiqueta "${args.etiqueta}"` : ""}${args?.pagina > 1 ? ` (página ${args.pagina})` : ""}…`;
+  if (nombre === "buscar") return `Buscando "${args?.texto || ""}" en tus chats…`;
+  if (nombre === "ver_chat") return `Leyendo el chat #${args?.id}…`;
+  return `Consultando ${nombre}…`;
+}
+const resumenSalida = (t) => { const s = String(t); if (/^Error/.test(s)) return "⚠️ " + s.slice(0, 120); const m = s.match(/^De (\d+) chats|^(\d+) chats|^No /); return "✓ " + (m ? s.split("\n")[0].slice(0, 120) : "listo"); };
 
-async function asistenteGroq(env, u, key, token, sistema, historial, presupuesto) {
+async function asistenteGroq(env, u, key, token, sistema, historial, presupuesto, progreso = () => {}) {
   const msgs = [{ role: "system", content: sistema }, ...historial.slice(-10).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 4000) }))];
   const pasos = [];
   for (let vuelta = 0; vuelta < 6; vuelta++) {
     if (!presupuesto.tomar(2)) break;
-    const d = await llamarGroq(env, key, { messages: msgs, tools: HERRAMIENTAS_GROQ, tool_choice: "auto", temperature: 0.3, max_tokens: 4096 });
+    progreso(vuelta === 0 ? "Groq está pensando qué revisar…" : "Groq está analizando lo que encontró…");
+    const d = await llamarGroq(env, key, { messages: msgs, tools: HERRAMIENTAS_GROQ, tool_choice: "auto", temperature: 0.3, max_tokens: 4096 }, progreso);
     const m = d.choices?.[0]?.message || {};
     const llamadas = m.tool_calls || [];
     if (!llamadas.length) return { respuesta: String(m.content || "").trim() || "No obtuve respuesta, intenta de nuevo.", pasos, via: "Groq" };
@@ -855,8 +869,10 @@ async function asistenteGroq(env, u, key, token, sistema, historial, presupuesto
       let args = {};
       try { args = JSON.parse(tc.function?.arguments || "{}") || {}; } catch {}
       let salida;
+      progreso(pasoHumano(tc.function?.name, args));
       try { salida = await herramientaAsistente(env, u, token, tc.function?.name, args, presupuesto); }
       catch (err) { salida = "Error: " + err.message; }
+      progreso(resumenSalida(salida));
       pasos.push(describirPaso(tc.function?.name, args));
       msgs.push({ role: "tool", tool_call_id: tc.id, content: String(salida).slice(0, 15000) });
     }
@@ -864,7 +880,7 @@ async function asistenteGroq(env, u, key, token, sistema, historial, presupuesto
   return { respuesta: "Revisé varios chats pero no alcancé a terminar. Haz una pregunta más concreta (por ejemplo, sobre un chat o un tema).", pasos, via: "Groq" };
 }
 
-async function asistente(env, u, historial) {
+async function asistente(env, u, historial, progreso = () => {}) {
   const key = await descifrar(env, u.gemini_key);
   const keyGroq = u.groq_key ? await descifrar(env, u.groq_key) : "";
   const token = await descifrar(env, u.cw_token);
@@ -885,12 +901,15 @@ Reglas:
   for (let vuelta = 0; vuelta < 6; vuelta++) {
     if (!presupuesto.tomar(2)) break;
     let d;
-    try { ({ d } = await llamarGemini(env, u, key, { systemInstruction: { parts: [{ text: sistema }] }, contents, tools: HERRAMIENTAS_ASISTENTE, generationConfig: { temperature: 0.3, maxOutputTokens: 8192 } })); }
+    progreso(vuelta === 0 ? "Gemini está pensando qué revisar…" : "Gemini está analizando lo que encontró…");
+    // En el asistente no se espera de más: si Gemini tarda o está saturado, se pasa rápido a Groq
+    try { ({ d } = await llamarGemini(env, u, key, { systemInstruction: { parts: [{ text: sistema }] }, contents, tools: HERRAMIENTAS_ASISTENTE, generationConfig: { temperature: 0.3, maxOutputTokens: 8192 } }, { espera: 20000, intentos: 1, modelos: keyGroq ? 2 : 3, aviso: progreso })); }
     catch (err) {
       // Gemini falló: se repite la consulta completa con Groq
       if (keyGroq) {
-        presupuesto.tomar(6);
-        try { return await asistenteGroq(env, u, keyGroq, token, sistema, historial, presupuesto); }
+        progreso(`Gemini no respondió (${err.message}). Sigo con Groq…`);
+        presupuesto.tomar(3);
+        try { return await asistenteGroq(env, u, keyGroq, token, sistema, historial, presupuesto, progreso); }
         catch (eq) { throw new Error(`Ni Gemini ni Groq respondieron (${err.message} · ${eq.message}). Intenta de nuevo en un minuto.`); }
       }
       throw new Error(err.transitorio ? "Gemini está saturado en este momento; intenta de nuevo en un minuto. (Pon tu llave de Groq para tener respaldo.)" : err.message);
@@ -907,8 +926,10 @@ Reglas:
     for (const p of llamadas) {
       const fc = p.functionCall;
       let salida;
+      progreso(pasoHumano(fc.name, fc.args || {}));
       try { salida = await herramientaAsistente(env, u, token, fc.name, fc.args || {}, presupuesto); }
       catch (err) { salida = "Error: " + err.message; }
+      progreso(resumenSalida(salida));
       pasos.push(describirPaso(fc.name, fc.args));
       respuestas.push({ functionResponse: { ...(fc.id ? { id: fc.id } : {}), name: fc.name, response: { resultado: String(salida).slice(0, 15000) } } });
     }
@@ -1164,7 +1185,7 @@ async function aprenderEstilo(env, u) {
   return `Trato de usted, cordial y breve. Ejemplos reales de cómo escribo:\n` + ejemplos.map((x) => `- ${x}`).join("\n");
 }
 
-async function api(req, env, url) {
+async function api(req, env, url, ctx) {
   const ruta = url.pathname;
   if (ruta === "/api/login" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
@@ -1247,9 +1268,23 @@ async function api(req, env, url) {
   }
 
   if (ruta === "/api/asistente" && req.method === "POST") {
-    if (!u.gemini_key) return json({ error: "Primero guarda tu llave de Gemini en Horario y reglas." }, 400);
+    if (!u.gemini_key) return json({ error: "Primero guarda tu llave de Gemini en Llaves de IA." }, 400);
     const b = await req.json().catch(() => ({}));
-    return json(await asistente(env, u, Array.isArray(b.historial) ? b.historial : []));
+    // Respuesta en vivo: cada línea es un paso; la última trae la respuesta
+    const { readable, writable } = new TransformStream();
+    const w = writable.getWriter();
+    const codif = new TextEncoder();
+    const enviar = (o) => w.write(codif.encode(JSON.stringify(o) + "\n")).catch(() => {});
+    const t0 = Date.now();
+    const trabajo = (async () => {
+      try {
+        const r = await asistente(env, u, Array.isArray(b.historial) ? b.historial : [], (paso) => enviar({ paso, s: Math.round((Date.now() - t0) / 1000) }));
+        await enviar({ fin: true, ...r });
+      } catch (e) { await enviar({ error: e.message }); }
+      finally { await w.close().catch(() => {}); }
+    })();
+    if (ctx?.waitUntil) ctx.waitUntil(trabajo);
+    return new Response(readable, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
   }
 
   if (ruta.startsWith("/api/reporte/") && req.method === "POST") {
@@ -1328,7 +1363,7 @@ async function api(req, env, url) {
 }
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     try {
       await esquema(env);
@@ -1338,7 +1373,7 @@ export default {
           const o = req.headers.get("Origin");
           if (o && o !== url.origin) return json({ error: "Origen no permitido" }, 403);
         }
-        return await api(req, env, url);
+        return await api(req, env, url, ctx);
       }
       return new Response("No encontrado", { status: 404 });
     } catch (e) {
