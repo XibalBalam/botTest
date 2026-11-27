@@ -5,65 +5,100 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Respaldo de Chatwoot</title>
 <style>
-:root{--bg:#f4f5f2;--panel:#fff;--ink:#1c2321;--muted:#6b7570;--line:#e2e5df;--brand:#1f6f5c;--brand-2:#e7f2ee;--warn:#b45309;--warn-2:#fdf3e4;--bad:#b42318;--bad-2:#fdecea;--info:#2b5ea7;--info-2:#e9f0fb;--sh:0 1px 2px rgba(20,30,25,.06),0 2px 8px rgba(20,30,25,.04)}
+:root{--bg:#f4f5f2;--panel:#fff;--ink:#1c2321;--muted:#5f6a65;--line:#e2e5df;--brand:#1f6f5c;--brand-2:#e7f2ee;--warn:#a14a07;--warn-2:#fdf3e4;--bad:#b42318;--bad-2:#fdecea;--info:#2b5ea7;--info-2:#e9f0fb;--ok:#15803d;--ok-2:#e8f6ec}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+a{color:var(--brand)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 13px}
 button.pri{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+button.mini{padding:4px 10px;font-size:12.5px}
 button:disabled{opacity:.55;cursor:default}
 input,select,textarea{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff;outline:none;width:100%}
 input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-2)}
 textarea{resize:vertical;min-height:120px;font-size:13px;line-height:1.45}
 label{display:block;font-weight:600;font-size:13px;margin:12px 0 5px}
 .hide{display:none!important}.muted{color:var(--muted)}.small{font-size:12.5px}
-.mark{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--brand);color:#fff;font-weight:800;font-size:13px}
-#login{display:grid;place-items:center;min-height:100vh}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh);padding:20px}
-#login .card{width:min(400px,92vw);padding:28px}
+.mark{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--brand);color:#fff;font-weight:800;font-size:13px;flex:none}
+#login{display:grid;place-items:center;min-height:100vh;padding:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+#login .card{width:min(400px,100%);padding:26px}
 .err{color:var(--bad);background:var(--bad-2);border-radius:8px;padding:8px 10px;margin-top:12px;font-size:13px}
-header{display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
-header .t{font-weight:700}
-header .sp{flex:1}
-nav{display:flex;gap:2px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line);overflow:auto}
-nav button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 14px;color:var(--muted);font-weight:600;white-space:nowrap}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header .t{font-weight:700}header .sp{flex:1}
+header .u{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45vw}
+nav{display:flex;gap:2px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 12px;color:var(--muted);font-weight:600;white-space:nowrap}
 nav button.on{color:var(--brand);border-bottom-color:var(--brand)}
-main{max-width:920px;margin:0 auto;padding:18px}
-.card + .card{margin-top:14px}
+main{max-width:960px;margin:0 auto;padding:14px}
+.card + .card{margin-top:12px}
 .card h2{margin:0 0 4px;font-size:16px}
-.modos{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
-.modo{border:2px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;background:#fff;text-align:left}
-.modo b{display:block;font-size:15px}
-.modo.on{border-color:var(--brand);background:var(--brand-2)}
-.modo.on.auto{border-color:#b45309;background:var(--warn-2)}
-.estado{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.pill{font-size:12.5px;padding:3px 10px;border-radius:999px;background:#eef0ec}
-.pill.ok{background:var(--brand-2);color:var(--brand)}.pill.warn{background:var(--warn-2);color:var(--warn)}.pill.bad{background:var(--bad-2);color:var(--bad)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
-.dias{display:grid;grid-template-columns:110px 1fr 1fr;gap:6px 10px;align-items:center;margin-top:8px}
-.dias input[type=time]{padding:5px 8px}
-.row{display:flex;gap:8px;align-items:center}
-.save{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.save{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
+.help{background:var(--info-2);border-radius:10px;padding:10px 12px;font-size:13px;margin-top:10px}
+.help ol{margin:4px 0 0;padding-left:18px}
+/* banner de estado */
+.banner{display:flex;gap:12px;align-items:flex-start;border-radius:12px;padding:14px 16px;border:1px solid var(--line)}
+.banner .ico{font-size:26px;line-height:1}
+.banner b{display:block;font-size:17px}
+.banner.ok{background:var(--ok-2);border-color:#bfe3cb}.banner.ok b{color:var(--ok)}
+.banner.warn{background:var(--warn-2);border-color:#f3d6ae}.banner.warn b{color:var(--warn)}
+.banner.bad{background:var(--bad-2);border-color:#f3c1bc}.banner.bad b{color:var(--bad)}
+.banner.info{background:var(--info-2);border-color:#c9daf5}.banner.info b{color:var(--info)}
+/* controles */
+.ctrl{display:grid;grid-template-columns:1.3fr 1fr;gap:12px;margin-top:12px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:10px 6px;background:#fff;font-weight:600;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on[data-m=apagado]{background:var(--bad);color:#fff}
+.seg button.on[data-m=ensayo]{background:var(--info);color:#fff}
+.seg button.on[data-m=automatico]{background:var(--ok);color:#fff}
+.sw{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fff;cursor:pointer;margin:0;font-weight:600}
+.sw input{width:18px;height:18px;flex:none;accent-color:var(--ok);margin:0}
+/* semáforos */
+.luces{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:12px}
+.luz{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.luz .t{display:flex;align-items:center;gap:8px;font-weight:700}
+.dot{width:12px;height:12px;border-radius:50%;flex:none;background:#c5cbc7}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:#d97706}.dot.info{background:var(--info)}
+.luz .d{font-size:12.5px;color:var(--muted);margin-top:3px}
+.luz a{font-size:12.5px}
+/* números de hoy */
+.nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:12px}
+.num{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.num b{display:block;font-size:24px;line-height:1.2}
+.num span{font-size:12.5px;color:var(--muted)}
+.num.alerta{border-color:#f3c1bc;background:var(--bad-2)}.num.alerta b{color:var(--bad)}
+/* listas */
+.pend{border:1px solid #f3c1bc;background:var(--bad-2);border-radius:10px;padding:10px 12px;margin-top:8px}
+.pend .r{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.pend .m{font-size:13px;margin-top:4px}
+.diag{list-style:none;padding:0;margin:10px 0 0}
+.diag li{padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+.diag li:before{content:"✅ ";}.diag li.no:before{content:"❌ ";}
 .reg{width:100%;border-collapse:collapse;font-size:13px}
 .reg td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 .reg .tp{white-space:nowrap;font-weight:600}
-.tp.respondió,.tp.retomó{color:var(--brand)}.tp.pausa,.tp.reintento,.tp.espera{color:var(--warn)}.tp.error,.tp.bloqueada{color:var(--bad)}.tp.ensayo{color:var(--info)}.tp.IA{color:var(--bad)}
+.tp.g{color:var(--ok)}.tp.w{color:var(--warn)}.tp.r{color:var(--bad)}.tp.b{color:var(--info)}
+.dias{display:grid;grid-template-columns:110px 1fr 1fr;gap:6px 10px;align-items:center;margin-top:8px}
+.dias input[type=time]{padding:5px 8px}
 .sim{display:flex;flex-direction:column;gap:8px;background:#f7f8f5;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:160px;max-height:420px;overflow:auto}
 .b{padding:8px 11px;border-radius:10px;max-width:80%;white-space:pre-wrap;word-wrap:break-word}
 .b.c{align-self:flex-start;background:#fff;border:1px solid var(--line)}
 .b.v{align-self:flex-end;background:#e3f1eb;border:1px solid #cfe4da}
 .b.a{align-self:flex-start;background:#fff;border:1px solid var(--line);max-width:92%}
-.b.a a{color:var(--brand);font-weight:600}
+.b.a a{font-weight:600}
 .b.u{align-self:flex-end;background:var(--brand);color:#fff}
+.b.meta{align-self:center;background:none;font-size:12px;color:var(--muted);max-width:95%;text-align:center}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font-size:12.5px}
-.b.meta{align-self:center;background:none;font-size:12px;color:var(--muted);max-width:95%;text-align:center}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1c2321;color:#fff;padding:9px 14px;border-radius:9px;font-size:13px;z-index:20;max-width:90vw}
-.spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
-@keyframes s{to{transform:rotate(360deg)}}
-.help{background:var(--info-2);border-radius:10px;padding:10px 12px;font-size:13px;margin-top:10px}
-.help ol{margin:4px 0 0;padding-left:18px}
-.barra{height:8px;background:#eef0ec;border-radius:99px;overflow:hidden;margin-top:12px}.barra i{display:block;height:100%;width:0;background:var(--brand);transition:width .3s}
-@media(max-width:700px){.modos,.grid2{grid-template-columns:1fr}}
+.spin:before{content:"…"}
+.barra{height:8px;background:#eef0ec;border-radius:99px;overflow:hidden;margin-top:12px}.barra i{display:block;height:100%;width:0;background:var(--brand)}
+.estado{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.pill{font-size:12.5px;padding:3px 10px;border-radius:999px;background:#eef0ec}
+.pill.ok{background:var(--ok-2);color:var(--ok)}.pill.warn{background:var(--warn-2);color:var(--warn)}.pill.bad{background:var(--bad-2);color:var(--bad)}
+@media(max-width:700px){header .u{display:none}.reg tr{display:block;padding:8px 0;border-bottom:1px solid var(--line)}.reg td{display:block;padding:1px 0;border:0}.grid2,.ctrl{grid-template-columns:1fr}.dias{grid-template-columns:90px 1fr 1fr}main{padding:10px}.card{padding:14px}.b{max-width:92%}}
 </style>
 </head>
 <body>
@@ -80,13 +115,14 @@ main{max-width:920px;margin:0 auto;padding:18px}
 </section>
 
 <section id="app" class="hide">
-  <header><span class="mark">R</span><span class="t">Respaldo de Chatwoot</span><span class="sp"></span><span class="small muted" id="h-user"></span><button id="b-out">Salir</button></header>
+  <header><span class="mark">R</span><span class="t">Respaldo de Chatwoot</span><span class="sp"></span><span class="u" id="h-user"></span><button id="b-out" class="mini">Salir</button></header>
   <nav>
     <button data-v="inicio" class="on">Inicio</button>
     <button data-v="asistente">Asistente</button>
     <button data-v="reporte">Reporte</button>
     <button data-v="ficha">Ficha y estilo</button>
     <button data-v="horario">Horario y reglas</button>
+    <button data-v="ia">Llaves de IA</button>
     <button data-v="avisos">Avisos</button>
     <button data-v="probar">Probar</button>
   </nav>
@@ -94,18 +130,47 @@ main{max-width:920px;margin:0 auto;padding:18px}
     <!-- INICIO -->
     <div data-p="inicio">
       <div class="card">
-        <h2>Modo de trabajo</h2>
-        <div class="muted small">Solo actúa en tus chats asignados y fuera de horario: responde cuando el cliente escribe y retoma una vez los chats que el bot te pasa sin respuesta.</div>
-        <div class="modos">
-          <button class="modo" data-m="apagado"><b>Apagado</b><span class="small muted">No hace nada.</span></button>
-          <button class="modo" data-m="ensayo"><b>Ensayo</b><span class="small muted">Escribe lo que respondería como <i>nota privada</i>. El cliente no ve nada.</span></button>
-          <button class="modo auto" data-m="automatico"><b>Automático</b><span class="small muted">Responde al cliente como tú, con espera al azar.</span></button>
+        <div class="banner" id="banner"></div>
+        <div class="ctrl">
+          <div>
+            <label style="margin-top:0">Modo del respaldo</label>
+            <div class="seg" id="seg">
+              <button data-m="apagado">Apagado</button>
+              <button data-m="ensayo">Ensayo</button>
+              <button data-m="automatico">Automático</button>
+            </div>
+            <div class="small muted" id="modo-exp" style="margin-top:6px"></div>
+          </div>
+          <div>
+            <label style="margin-top:0">¿Cuándo contesta?</label>
+            <label class="sw"><input type="checkbox" class="siempre-sw"> Contestar a todas horas</label>
+            <div class="small muted" style="margin-top:6px">Activado: contesta también en horario de oficina cuando tú no contestas. Desactivado: solo fuera de tu horario. Se guarda al tocarlo.</div>
+          </div>
         </div>
-        <div class="estado" id="estado"></div>
-        <div class="help">¿Vas a atender tú un chat? Solo escríbele al cliente: el respaldo se hace a un lado en ese chat. Si dejas de responder, él retoma solo.</div>
+        <div class="luces" id="luces"></div>
+        <div class="row" style="margin-top:8px"><button class="mini" id="b-verificar">Volver a probar Gemini y Groq</button><span class="small muted" id="verif-st"></span></div>
       </div>
+
       <div class="card">
-        <div class="row" style="justify-content:space-between"><h2>Actividad reciente</h2><div class="row" style="width:auto"><button id="b-revisar">Revisar ahora</button><button id="b-recargar">↻</button></div></div>
+        <h2>Hoy</h2>
+        <div class="nums" id="nums"></div>
+      </div>
+
+      <div class="card" id="c-pend">
+        <div class="row" style="justify-content:space-between"><h2>Te necesitan</h2><button class="mini hide" id="b-visto-todos">Marcar todos como vistos</button></div>
+        <div class="small muted">Chats donde el respaldo no puede o no debe decidir solo. Te avisa por Telegram cada pocos minutos hasta que le contestes al cliente en Chatwoot (o toques "Ya lo vi").</div>
+        <div id="pend"></div>
+      </div>
+
+      <div class="card">
+        <h2>¿Por qué no contestó un chat?</h2>
+        <div class="small muted">Escribe el número del chat de Chatwoot y te digo paso a paso si lo va a contestar y, si no, qué lo está frenando.</div>
+        <form class="row" id="f-diag" style="margin-top:10px"><input id="diag-in" inputmode="numeric" placeholder="Ej.: 5595" style="max-width:180px"><button class="pri">Revisar chat</button></form>
+        <div id="diag"></div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><h2>Actividad reciente</h2><div class="row"><button class="mini" id="b-revisar">Revisar mis chats ahora</button><button class="mini" id="b-recargar">Actualizar</button></div></div>
         <table class="reg" id="reg"></table>
       </div>
     </div>
@@ -128,32 +193,49 @@ main{max-width:920px;margin:0 auto;padding:18px}
     <!-- HORARIO -->
     <div data-p="horario" class="hide">
       <div class="card">
-        <h2>Horario de oficina</h2>
-        <div class="muted small">Fuera de estas horas trabaja el respaldo. Desmarca un día para cubrirlo completo.</div>
+        <h2>Cuándo contesta</h2>
+        <label class="sw"><input type="checkbox" class="siempre-sw"> Contestar a todas horas (también en horario de oficina si tú no contestas)</label>
+        <div class="small muted" style="margin-top:6px">Se guarda al tocarlo. Si lo desactivas, solo contesta fuera del horario de oficina de abajo.</div>
         <div class="grid2">
           <div><label>País</label><select id="pais"><option>El Salvador</option><option>Guatemala</option></select></div>
           <div><label>Zona horaria</label><select id="tz"><option value="America/El_Salvador">El Salvador</option><option value="America/Guatemala">Guatemala</option></select></div>
         </div>
+        <label>Horario de oficina (desmarca un día para que lo cubra completo)</label>
         <div class="dias" id="dias"></div>
-        <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="siempre" style="width:auto"> Trabajar también en horario de oficina (todo el día)</label>
+        <div class="save"><button class="pri" id="b-g-horario">Guardar horario</button></div>
       </div>
       <div class="card">
         <h2>Reglas</h2>
         <div class="grid2">
-          <div><label>Esperar antes de responder (al azar)</label><div class="row"><input id="esp-min" type="number" min="0" max="60"> <span>a</span> <input id="esp-max" type="number" min="0" max="60"> <span>min</span></div></div>
-          <div><label>Máximo de respuestas por chat</label><input id="max-resp" type="number" min="1" max="20"><div class="small muted">Después de eso solo te avisa.</div></div>
-          <div><label>Pausa cuando atiendes tú</label><div class="row"><input id="pausa-h" type="number" min="0" max="24"> <span>horas</span></div><div class="small muted">Si escribes en un chat, el respaldo no lo toca por este tiempo desde tu último mensaje; después retoma solo. 0 = sin pausa.</div></div>
-          <div><label>Solo chats con esta etiqueta (opcional)</label><input id="etiqueta" placeholder="ej. sk_sv_atencion_humana"><div class="small muted">Vacío = todos tus chats asignados.</div></div>
-          <div><label>Modelo de Gemini</label><input id="modelo" list="modelos"><datalist id="modelos"><option value="gemini-3.5-flash"><option value="gemini-3.5-flash-lite"><option value="gemini-3.6-flash"><option value="gemini-2.5-flash"></datalist></div>
+          <div><label>Esperar antes de contestar (al azar, para no parecer bot)</label><div class="row" style="flex-wrap:nowrap"><input id="esp-min" type="number" min="0" max="60"> <span>a</span> <input id="esp-max" type="number" min="0" max="60"> <span>min</span></div></div>
+          <div><label>Si estás en la conversación, darte este tiempo para contestar tú</label><div class="row" style="flex-wrap:nowrap"><input id="pausa-min" type="number" min="0" max="120"> <span>min</span></div><div class="small muted">Cuenta desde el mensaje del cliente, solo si le escribiste en las últimas 2 horas. Si no contestas en ese tiempo, contesta el respaldo. 0 = no esperarte.</div></div>
+          <div><label>Repetir avisos de Telegram cada</label><div class="row" style="flex-wrap:nowrap"><input id="repetir-min" type="number" min="1" max="60"> <span>min</span></div><div class="small muted">Para chats que te necesitan, hasta que les contestes.</div></div>
+          <div><label>Máximo de respuestas seguidas por chat</label><input id="max-resp" type="number" min="1" max="20"><div class="small muted">Si contesta esa cantidad sin que intervengas, deja de contestar y te avisa. Se reinicia cuando tú escribes.</div></div>
+          <div><label>Solo chats con esta etiqueta (opcional)</label><input id="etiqueta" placeholder="Vacío = todos tus chats asignados"></div>
         </div>
+        <div class="save"><button class="pri" id="b-g-reglas">Guardar reglas</button></div>
+      </div>
+    </div>
+
+    <!-- IA -->
+    <div data-p="ia" class="hide">
+      <div class="card">
+        <h2>Gemini (principal)</h2>
+        <div class="luces" id="luz-gemini" style="margin-top:6px"></div>
         <label>Llave de API de Gemini</label>
         <input id="gkey" type="password" autocomplete="off">
-        <div class="small muted" id="gkey-st"></div>
-        <div class="help">Cómo sacarla: <b>aistudio.google.com</b> → <b>Get API key</b> → <b>Create API key</b>. Tu suscripción de Gemini no cubre la API; activa la facturación del proyecto (prepago desde $10) para que Google no use las conversaciones de tus clientes y tengas límites más altos. Cada vendedor usa su propia llave y paga lo suyo.</div>
-        <label>Llave de API de Groq (respaldo, opcional)</label>
+        <label>Modelo</label>
+        <input id="modelo" list="modelos"><datalist id="modelos"><option value="gemini-3.5-flash"><option value="gemini-3.5-flash-lite"><option value="gemini-3.6-flash"><option value="gemini-2.5-flash"></datalist>
+        <div class="help">Cómo sacarla: <b>aistudio.google.com</b> → <b>Get API key</b> → <b>Create API key</b>. Tu suscripción de Gemini no cubre la API. Activa la facturación del proyecto para que Google no use las conversaciones de tus clientes y tengas límites más altos.</div>
+        <div class="save"><button class="pri" id="b-g-gemini">Guardar Gemini</button></div>
+      </div>
+      <div class="card">
+        <h2>Groq (respaldo si Gemini falla)</h2>
+        <div class="luces" id="luz-groq" style="margin-top:6px"></div>
+        <label>Llave de API de Groq</label>
         <input id="qkey" type="password" autocomplete="off">
-        <div class="help">Si Gemini está caído o saturado, el respaldo usa Groq con las mismas reglas y filtros. Si ninguno de los dos responde, no le escribe nada al cliente y te avisa por Telegram cada 15 minutos hasta que le contestes. Cómo sacarla: <b>console.groq.com</b> → <b>API Keys</b> → <b>Create API Key</b> (tiene plan gratuito). <a href="#" id="b-borrar-groq">Quitar llave de Groq</a></div>
-        <div class="save"><button class="pri" id="b-g-hor">Guardar</button></div>
+        <div class="help">Si Gemini está caído o saturado, se usa Groq con las mismas reglas. También transcribe los audios del reporte. Cómo sacarla: <b>console.groq.com</b> → <b>API Keys</b> → <b>Create API Key</b> (tiene plan gratuito).</div>
+        <div class="save"><button id="b-borrar-groq">Quitar llave de Groq</button><button class="pri" id="b-g-groq">Guardar Groq</button></div>
       </div>
     </div>
 
@@ -162,7 +244,7 @@ main{max-width:920px;margin:0 auto;padding:18px}
       <div class="card">
         <h2>Avisos por Telegram</h2>
         <div class="help" id="tg-sinbot">No hace falta crear un bot: los avisos te llegan como mensaje de <b>CallMeBot</b> en Telegram. Solo configura tu usuario en la sección de abajo.</div>
-        <div class="muted small">⭐ <b>Prioridad</b> (quiere agendar, pagar, negociar, reclamo): mensaje sin sonido. 🚨 <b>Emergencia</b> (robo, asalto, vehículo desaparecido): mensaje con sonido y llamada.</div>
+        <div class="muted small">⭐ <b>Te necesita</b> (quiere agendar o pagar, pide descuento, reclamo, pregunta algo que no está en tu ficha, o la IA no pudo contestar): te avisa y repite el aviso cada pocos minutos (lo eliges en Horario y reglas) hasta que le contestes. 🚨 <b>Emergencia</b> (robo, asalto, vehículo desaparecido): aviso cada minuto y llamada cada 5 minutos hasta que contestes.</div>
         <div class="estado" id="tg-st"></div>
         <div class="save" style="justify-content:flex-start"><button class="pri" id="b-tg">Vincular mi Telegram</button><button id="b-tg-test">Enviar prueba</button></div>
         <div id="tg-link" class="help hide"></div>
@@ -232,10 +314,18 @@ main{max-width:920px;margin:0 auto;padding:18px}
 
 <script>
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (ts) => new Date(ts * 1000).toLocaleString("es", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-let YO = null, SIM = [];
+const hace = (ts) => { const s = Math.floor(Date.now() / 1000) - ts; return s < 90 ? "hace 1 min" : s < 3600 ? `hace ${Math.round(s / 60)} min` : s < 172800 ? `hace ${Math.round(s / 3600)} h` : `hace ${Math.round(s / 86400)} días`; };
+let YO = null, SIM = [], VERIF = null;
 const DIAS = [[1, "Lunes"], [2, "Martes"], [3, "Miércoles"], [4, "Jueves"], [5, "Viernes"], [6, "Sábado"], [0, "Domingo"]];
+const TIPOS = {
+  "respondió": ["Contestó", "g"], "retomó": ["Retomó chat", "g"], "ensayo": ["Ensayo", "b"], "sin respuesta": ["No contestó", "w"],
+  "pausa": ["Te dio tiempo", "w"], "reintento": ["Reintentando", "w"], "sin IA": ["IA caída", "r"], "error": ["Error", "r"],
+  "bloqueada": ["Respuesta cambiada", "w"], "modo": ["Cambio de modo", ""], "atendido": ["Lo tomaste tú", "g"], "visto": ["Marcado visto", ""],
+};
+const linkChat = (id) => `${esc(YO.chatwoot)}/app/accounts/${YO.account_id}/conversations/${id}`;
 
 function toast(t, ms = 3500) { const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), ms); }
 async function call(method, url, body) {
@@ -245,7 +335,7 @@ async function call(method, url, body) {
   if (!r.ok) throw new Error(j.error || "Error " + r.status);
   return j;
 }
-async function ocupado(btn, fn) { const t = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; try { return await fn(); } catch (e) { toast(e.message, 6000); } finally { btn.disabled = false; btn.innerHTML = t; } }
+async function ocupado(btn, fn) { const t = btn.textContent; btn.disabled = true; btn.textContent = "Un momento…"; try { return await fn(); } catch (e) { toast(e.message, 6000); } finally { btn.disabled = false; btn.textContent = t; } }
 function mostrarLogin() { $("#app").classList.add("hide"); $("#login").classList.remove("hide"); }
 
 $("#f-login").onsubmit = async (e) => {
@@ -253,64 +343,141 @@ $("#f-login").onsubmit = async (e) => {
   await ocupado($("#b-login"), async () => {
     try { await call("POST", "/api/login", { email: $("#l-email").value, password: $("#l-pass").value }); }
     catch (err) { $("#l-err").textContent = err.message; $("#l-err").classList.remove("hide"); return; }
-    $("#l-pass").value = ""; await cargar();
+    $("#l-pass").value = ""; await cargar(); verificar();
   });
 };
 $("#b-out").onclick = async () => { await call("POST", "/api/logout"); mostrarLogin(); };
-document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
-  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
-  document.querySelectorAll("[data-p]").forEach((p) => p.classList.toggle("hide", p.dataset.p !== b.dataset.v));
+$$("nav button").forEach((b) => b.onclick = () => {
+  $$("nav button").forEach((x) => x.classList.toggle("on", x === b));
+  $$("[data-p]").forEach((p) => p.classList.toggle("hide", p.dataset.p !== b.dataset.v));
+  window.scrollTo(0, 0);
 });
+const irA = (v) => document.querySelector(`nav button[data-v="${v}"]`).click();
+
+function luz(color, titulo, detalle, accion) {
+  return `<div class="luz"><div class="t"><span class="dot ${color}"></span>${titulo}</div><div class="d">${detalle}</div>${accion || ""}</div>`;
+}
+function luzIA(nombre, tiene, v, clave) {
+  if (!tiene) return luz("bad", `${nombre}: falta la llave`, clave === "groq" ? "Sin respaldo: si Gemini falla, no hay quién conteste." : "Sin llave el respaldo no puede contestar.", `<a href="#" data-ir="ia">Poner llave</a>`);
+  if (!v) return luz("", `${nombre}: probando…`, "Revisando que la llave funcione.");
+  const r = v[clave];
+  if (r.estado === "ok") return luz("ok", `${nombre}: listo`, "La llave funciona.");
+  if (r.estado === "modelo") return luz("warn", `${nombre}: revisar modelo`, esc(r.detalle), `<a href="#" data-ir="ia">Cambiar modelo</a>`);
+  if (r.estado === "invalida") return luz("bad", `${nombre}: llave rechazada`, esc(r.detalle) + ". Pega una llave nueva.", `<a href="#" data-ir="ia">Cambiar llave</a>`);
+  return luz("bad", `${nombre}: no responde`, esc(r.detalle || "") + ". Se vuelve a probar sola.");
+}
+
+function pintarInicio() {
+  const m = YO.modo, trabaja = YO.fuera_de_horario;
+  let cls, ico, tit;
+  if (m === "apagado") { cls = "bad"; ico = "⛔"; tit = "Respaldo APAGADO: no contesta nada"; }
+  else if (!YO.tiene_gemini) { cls = "bad"; ico = "⛔"; tit = "No puede contestar: falta la llave de Gemini"; }
+  else if (m === "ensayo") { cls = "info"; ico = "🧪"; tit = trabaja ? "Modo ENSAYO: solo deja notas privadas, el cliente no ve nada" : "Modo ENSAYO, en pausa por horario de oficina"; }
+  else if (trabaja) { cls = "ok"; ico = "✅"; tit = "Respaldo TRABAJANDO: contesta si tú no contestas"; }
+  else { cls = "warn"; ico = "⏸️"; tit = "Respaldo en PAUSA por horario de oficina"; }
+  $("#banner").className = "banner " + cls;
+  $("#banner").innerHTML = `<span class="ico">${ico}</span><div><b>${tit}</b><span class="small">${esc(m === "apagado" ? "Elige Automático para que conteste por ti." : YO.horario_texto)}</span></div>`;
+  $$("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
+  $("#modo-exp").textContent = { apagado: "No contesta ni avisa.", ensayo: "Escribe lo que contestaría como nota privada en Chatwoot. Sirve para probar.", automatico: "Contesta a tus clientes como tú, con espera al azar, y te avisa lo importante." }[m];
+  $$(".siempre-sw").forEach((x) => x.checked = !!YO.siempre);
+  const avisos = YO.telegram || YO.callmebot;
+  $("#luces").innerHTML = [
+    luz(m === "automatico" ? (trabaja ? "ok" : "warn") : m === "ensayo" ? "info" : "bad", "Respaldo", m === "automatico" ? (trabaja ? "Encendido y trabajando ahora." : "Encendido, esperando que salgas de la oficina.") : m === "ensayo" ? "En ensayo (no le escribe al cliente)." : "Apagado."),
+    luzIA("Gemini", YO.tiene_gemini, VERIF, "gemini"),
+    luzIA("Groq", YO.tiene_groq, VERIF, "groq"),
+    avisos ? luz("ok", "Avisos de Telegram", "Listos.") : luz("bad", "Avisos de Telegram", "Sin configurar: no te puede avisar.", `<a href="#" data-ir="avisos">Configurar</a>`),
+    YO.callmebot ? luz("ok", "Llamada de emergencia", "Lista (robo o asalto).") : luz("bad", "Llamada de emergencia", "Sin configurar.", `<a href="#" data-ir="avisos">Configurar</a>`),
+  ].join("");
+  if (YO.problema_ia && Date.now() / 1000 - YO.problema_ia.ts < 3600) $("#luces").innerHTML += luz("warn", "Falla reciente de IA", `${hace(YO.problema_ia.ts)}: ${esc(YO.problema_ia.detalle.slice(0, 140))}`);
+  const h = YO.hoy || {}, n = (k) => h[k] || 0, pend = YO.pendientes || [];
+  $("#nums").innerHTML = [
+    [n("respondió") + n("retomó"), "chats contestados por el respaldo"],
+    [pend.length, "te necesitan ahora", pend.length ? "alerta" : ""],
+    [n("pausa"), "veces te dio tiempo para contestar tú"],
+    [n("bloqueada"), "respuestas cambiadas por seguridad"],
+    [n("sin IA") + n("error"), "fallas sin contestar", n("sin IA") + n("error") ? "alerta" : ""],
+  ].map(([v, t, c]) => `<div class="num ${c || ""}"><b>${v}</b><span>${t}</span></div>`).join("");
+  $("#b-visto-todos").classList.toggle("hide", pend.length < 2);
+  $("#pend").innerHTML = pend.length ? pend.map((p) => `<div class="pend"><div class="r"><b>${p.pendiente_tipo === "emergencia" ? "🚨 " : p.pendiente_tipo === "ia" ? "⚠️ " : "⭐ "}<a href="${linkChat(p.conv_id)}" target="_blank">#${p.conv_id}</a> ${esc(p.contacto || "Cliente")}</b><span class="row"><a href="${linkChat(p.conv_id)}" target="_blank"><button class="mini pri" type="button">Abrir en Chatwoot</button></a><button class="mini" data-visto="${p.conv_id}">Ya lo vi, dejar de avisar</button></span></div><div class="m">${esc(p.pendiente)}</div><div class="small muted">Desde ${p.pendiente_desde ? fmt(p.pendiente_desde) : "—"} · ${p.avisos || 0} avisos enviados</div></div>`).join("") : `<div class="small muted" style="margin-top:8px">✅ Nada pendiente.</div>`;
+  $("#reg").innerHTML = YO.registro.length ? YO.registro.map((r) => { const [t, c] = TIPOS[r.tipo] || [r.tipo, ""]; return `<tr><td class="small muted" style="white-space:nowrap">${fmt(r.ts)}</td><td class="tp ${c}">${esc(t)}</td><td>${r.conv_id ? `<a href="${linkChat(r.conv_id)}" target="_blank">#${r.conv_id}</a> ` : ""}${esc(r.detalle)}</td></tr>`; }).join("") : '<tr><td class="muted">Todavía no hay actividad.</td></tr>';
+  $("#luz-gemini").innerHTML = luzIA("Gemini", YO.tiene_gemini, VERIF, "gemini");
+  $("#luz-groq").innerHTML = luzIA("Groq", YO.tiene_groq, VERIF, "groq");
+  $("#tg-st").innerHTML = !YO.telegram_configurado ? "" : YO.telegram ? '<span class="pill ok">Bot propio vinculado</span>' : '<span class="pill warn">Bot propio sin vincular</span>';
+  $("#tg-sinbot").classList.toggle("hide", !!YO.telegram_configurado);
+  $("#b-tg").classList.toggle("hide", !YO.telegram_configurado);
+}
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-ir]"); if (a) { e.preventDefault(); irA(a.dataset.ir); }
+  const v = e.target.closest("[data-visto]");
+  if (v) ocupado(v, async () => { await call("POST", "/api/pendiente/visto", { id: Number(v.dataset.visto) }); toast("Listo, ya no te avisa de ese chat"); await cargar(false); });
+});
+$("#b-visto-todos").onclick = () => { if (confirm("¿Dejar de avisar de todos los chats pendientes?")) ocupado($("#b-visto-todos"), async () => { await call("POST", "/api/pendiente/visto", { todos: true }); await cargar(false); }); };
 
 async function cargar(rellenar = true) {
   YO = await call("GET", "/api/yo");
   $("#login").classList.add("hide"); $("#app").classList.remove("hide");
   $("#h-user").textContent = `${YO.nombre} · ${YO.email}`;
-  document.querySelectorAll(".modo").forEach((m) => m.classList.toggle("on", m.dataset.m === YO.modo));
-  const st = [];
-  st.push(YO.fuera_de_horario ? '<span class="pill ok">Ahora: fuera de horario (el respaldo trabaja)</span>' : '<span class="pill">Ahora: horario de oficina (el respaldo espera)</span>');
-  st.push(YO.tiene_gemini ? '<span class="pill ok">Gemini conectado</span>' : '<span class="pill bad">Falta la llave de Gemini</span>');
-  st.push(YO.tiene_groq ? '<span class="pill ok">Groq de respaldo listo</span>' : '<span class="pill warn">Sin Groq de respaldo</span>');
-  st.push(YO.telegram || YO.callmebot ? '<span class="pill ok">Avisos por Telegram listos</span>' : '<span class="pill warn">Avisos sin configurar</span>');
-  st.push(YO.callmebot ? '<span class="pill ok">Llamada de emergencia lista</span>' : '<span class="pill warn">Sin llamada de emergencia</span>');
-  $("#estado").innerHTML = st.join("");
-  $("#tg-st").innerHTML = !YO.telegram_configurado ? "" : YO.telegram ? '<span class="pill ok">Bot propio vinculado</span>' : '<span class="pill warn">Bot propio sin vincular</span>';
-  $("#tg-sinbot").classList.toggle("hide", !!YO.telegram_configurado);
-  $("#b-tg").classList.toggle("hide", !YO.telegram_configurado);
-  $("#reg").innerHTML = YO.registro.length ? YO.registro.map((r) => `<tr><td class="small muted" style="white-space:nowrap">${fmt(r.ts)}</td><td class="tp ${esc(r.tipo)}">${esc(r.tipo)}</td><td>${r.conv_id ? `<a href="${esc(YO.chatwoot)}/app/accounts/${YO.account_id}/conversations/${r.conv_id}" target="_blank">#${r.conv_id}</a> ` : ""}${esc(r.detalle)}</td></tr>`).join("") : '<tr><td class="muted">Todavía no hay actividad.</td></tr>';
+  pintarInicio();
   if (rellenar) llenar();
 }
+async function verificar() {
+  if (!YO || (!YO.tiene_gemini && !YO.tiene_groq)) return;
+  VERIF = null; $("#verif-st").textContent = "Probando…"; pintarInicio();
+  try { VERIF = await call("POST", "/api/verificar"); $("#verif-st").textContent = "Probado a las " + new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }); }
+  catch (e) { $("#verif-st").textContent = "No se pudo probar: " + e.message; VERIF = { gemini: { estado: "caido", detalle: e.message }, groq: { estado: "caido", detalle: e.message } }; }
+  pintarInicio();
+}
+$("#b-verificar").onclick = verificar;
+
 function llenar() {
   $("#ficha").value = YO.ficha || ""; $("#estilo").value = YO.estilo || "";
-  $("#pais").value = YO.pais; $("#tz").value = YO.tz; $("#siempre").checked = YO.siempre;
-  $("#esp-min").value = YO.espera_min ?? 1; $("#esp-max").value = YO.espera_max ?? 7; $("#max-resp").value = YO.max_respuestas ?? 4; $("#pausa-h").value = YO.pausa_horas ?? 2;
+  $("#pais").value = YO.pais; $("#tz").value = YO.tz;
+  $("#esp-min").value = YO.espera_min ?? 1; $("#esp-max").value = YO.espera_max ?? 7; $("#max-resp").value = YO.max_respuestas ?? 4;
+  $("#pausa-min").value = YO.pausa_min ?? 10; $("#repetir-min").value = YO.repetir_min ?? 1;
   $("#etiqueta").value = YO.etiqueta || ""; $("#modelo").value = YO.modelo || "gemini-3.5-flash"; $("#callmebot").value = YO.callmebot || "";
-  $("#gkey").value = ""; $("#gkey").placeholder = YO.tiene_gemini ? "Llave guardada (escribe otra para cambiarla)" : "Pega tu llave de Gemini";
-  $("#qkey").value = ""; $("#qkey").placeholder = YO.tiene_groq ? "Llave guardada (escribe otra para cambiarla)" : "Pega tu llave de Groq (opcional)";
+  $("#gkey").value = ""; $("#gkey").placeholder = YO.tiene_gemini ? "Llave guardada (escribe otra solo si quieres cambiarla)" : "Pega aquí tu llave de Gemini";
+  $("#qkey").value = ""; $("#qkey").placeholder = YO.tiene_groq ? "Llave guardada (escribe otra solo si quieres cambiarla)" : "Pega aquí tu llave de Groq";
   $("#b-borrar-groq").classList.toggle("hide", !YO.tiene_groq); $("#sim-groq-w").classList.toggle("hide", !YO.tiene_groq);
   $("#dias").innerHTML = DIAS.map(([d, n]) => { const r = YO.horario[d]; return `<label style="margin:0;display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-d="${d}" ${r ? "checked" : ""} style="width:auto">${n}</label><input type="time" data-i="${d}" value="${r ? r[0] : "08:00"}"><input type="time" data-f="${d}" value="${r ? r[1] : "18:00"}">`; }).join("");
 }
-async function guardar(btn, datos) { await ocupado(btn, async () => { await call("POST", "/api/ajustes", datos); toast("Guardado"); await cargar(); }); }
+async function guardar(btn, datos, msg) { await ocupado(btn, async () => { await call("POST", "/api/ajustes", datos); toast(msg || "Guardado"); await cargar(); }); }
 
-document.querySelectorAll(".modo").forEach((m) => m.onclick = async () => {
-  const modo = m.dataset.m;
-  if (modo === "automatico" && !confirm("En modo automático el respaldo responderá a tus clientes con tu usuario fuera de horario. ¿Ya lo probaste en modo Ensayo?")) return;
-  try { await call("POST", "/api/ajustes", { modo }); toast(modo === "apagado" ? "Respaldo apagado" : "Modo " + modo + " activado"); await cargar(false); } catch (e) { toast(e.message, 6000); }
+$$("#seg button").forEach((b) => b.onclick = async () => {
+  const modo = b.dataset.m;
+  if (modo === YO.modo) return;
+  if (modo === "automatico" && !confirm("En modo automático el respaldo le escribe a tus clientes con tu usuario. ¿Activarlo?")) return;
+  try { await call("POST", "/api/ajustes", { modo }); toast(modo === "apagado" ? "Respaldo apagado" : modo === "ensayo" ? "Modo ensayo activado" : "Modo automático activado"); await cargar(false); } catch (e) { toast(e.message, 6000); }
+});
+$$(".siempre-sw").forEach((x) => x.onchange = async () => {
+  try { await call("POST", "/api/ajustes", { siempre: x.checked }); toast(x.checked ? "Listo: contesta a todas horas si tú no contestas" : "Listo: solo contesta fuera de tu horario de oficina"); await cargar(false); }
+  catch (e) { x.checked = !x.checked; toast(e.message, 6000); }
 });
 $("#b-recargar").onclick = () => ocupado($("#b-recargar"), () => cargar(false));
-$("#b-revisar").onclick = () => ocupado($("#b-revisar"), async () => { const f = !YO.fuera_de_horario && confirm("Estás en horario de oficina. ¿Revisar de todas formas?"); await call("POST", "/api/revisar-ahora", { forzar: f }); await cargar(false); toast("Revisión hecha"); });
+$("#b-revisar").onclick = () => ocupado($("#b-revisar"), async () => { await call("POST", "/api/revisar-ahora", { forzar: false }); await cargar(false); toast("Revisión hecha. Si un chat no aparece, usa \"¿Por qué no contestó un chat?\""); });
+$("#f-diag").onsubmit = (e) => {
+  e.preventDefault();
+  const btn = $("#f-diag button");
+  ocupado(btn, async () => {
+    $("#diag").innerHTML = '<div class="small muted" style="margin-top:8px">Revisando…</div>';
+    const r = await call("POST", "/api/diagnostico", { id: $("#diag-in").value });
+    $("#diag").innerHTML = `<div class="help" style="background:${r.pasos.every((p) => p.ok) ? "var(--ok-2)" : "var(--warn-2)"}"><b>Chat <a href="${linkChat(r.id)}" target="_blank">#${r.id}</a> ${esc(r.contacto || "")}:</b> ${esc(r.conclusion)}</div><ul class="diag">${r.pasos.map((p) => `<li class="${p.ok ? "" : "no"}">${esc(p.texto)}</li>`).join("")}</ul>${r.historial?.length ? `<div class="small muted" style="margin-top:8px"><b>Lo último que hizo en este chat:</b><br>${r.historial.map((h) => `${fmt(h.ts)} · ${esc((TIPOS[h.tipo] || [h.tipo])[0])}: ${esc(h.detalle.slice(0, 200))}`).join("<br>")}</div>` : ""}`;
+  }).catch(() => {});
+};
 $("#b-g-ficha").onclick = () => guardar($("#b-g-ficha"), { ficha: $("#ficha").value, estilo: $("#estilo").value });
 $("#b-aprender").onclick = () => ocupado($("#b-aprender"), async () => { const r = await call("POST", "/api/aprender"); $("#estilo").value = r.estilo; toast("Revisa los ejemplos y dale Guardar"); });
-$("#b-g-hor").onclick = () => {
+$("#b-g-horario").onclick = () => {
   const horario = {};
   DIAS.forEach(([d]) => { horario[d] = document.querySelector(`[data-d="${d}"]`).checked ? [document.querySelector(`[data-i="${d}"]`).value, document.querySelector(`[data-f="${d}"]`).value] : null; });
-  const datos = { pais: $("#pais").value, tz: $("#tz").value, siempre: $("#siempre").checked, horario, espera_min: $("#esp-min").value, espera_max: $("#esp-max").value, max_respuestas: $("#max-resp").value, pausa_horas: $("#pausa-h").value, etiqueta: $("#etiqueta").value.trim(), modelo: $("#modelo").value.trim() };
-  if ($("#gkey").value.trim()) datos.gemini_key = $("#gkey").value.trim();
-  if ($("#qkey").value.trim()) datos.groq_key = $("#qkey").value.trim();
-  if (Number(datos.espera_min) > Number(datos.espera_max)) return toast("La espera mínima no puede ser mayor que la máxima");
-  guardar($("#b-g-hor"), datos);
+  guardar($("#b-g-horario"), { pais: $("#pais").value, tz: $("#tz").value, horario }, "Horario guardado");
 };
-$("#b-borrar-groq").onclick = (e) => { e.preventDefault(); if (confirm("¿Quitar tu llave de Groq? Si Gemini falla, ya no habrá respaldo.")) guardar($("#b-g-hor"), { borrar_groq: true }); };
+$("#b-g-reglas").onclick = () => {
+  const datos = { espera_min: $("#esp-min").value, espera_max: $("#esp-max").value, max_respuestas: $("#max-resp").value, pausa_min: $("#pausa-min").value, repetir_min: $("#repetir-min").value, etiqueta: $("#etiqueta").value.trim() };
+  if (Number(datos.espera_min) > Number(datos.espera_max)) return toast("La espera mínima no puede ser mayor que la máxima");
+  guardar($("#b-g-reglas"), datos, "Reglas guardadas");
+};
+$("#b-g-gemini").onclick = () => { const d = { modelo: $("#modelo").value.trim() || "gemini-3.5-flash" }; if ($("#gkey").value.trim()) d.gemini_key = $("#gkey").value.trim(); guardar($("#b-g-gemini"), d, "Gemini guardado").then(verificar); };
+$("#b-g-groq").onclick = () => { if (!$("#qkey").value.trim()) return toast("Pega la llave de Groq primero"); guardar($("#b-g-groq"), { groq_key: $("#qkey").value.trim() }, "Groq guardado").then(verificar); };
+$("#b-borrar-groq").onclick = () => { if (confirm("¿Quitar tu llave de Groq? Si Gemini falla, ya no habrá respaldo.")) guardar($("#b-borrar-groq"), { borrar_groq: true }, "Llave de Groq quitada").then(verificar); };
 $("#b-g-av").onclick = () => guardar($("#b-g-av"), { callmebot: $("#callmebot").value.trim() });
 $("#b-tg").onclick = () => ocupado($("#b-tg"), async () => { const r = await call("POST", "/api/telegram/vincular"); $("#tg-link").innerHTML = `Abre este enlace en tu celular y toca <b>Iniciar</b>: <br><a href="${esc(r.enlace)}" target="_blank">${esc(r.enlace)}</a><br><span class="small muted">Luego vuelve aquí y recarga.</span>`; $("#tg-link").classList.remove("hide"); });
 $("#b-tg-test").onclick = () => ocupado($("#b-tg-test"), async () => { await call("POST", "/api/ajustes", { callmebot: $("#callmebot").value.trim() }); const r = await call("POST", "/api/telegram/probar", {}); toast(r.telegram ? "Mensaje de prueba enviado" : "No se pudo enviar. Revisa tu usuario y que enviaste /start a @CallMeBot_txtbot"); });
@@ -424,8 +591,9 @@ $("#rp-stop").onclick = () => { RP.parar = true; rpEstado("Deteniendo…"); };
 $("#rp-bajar").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([RP.texto], { type: "text/markdown;charset=utf-8" })); a.download = RP.nombre; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
 $("#rp-copiar").onclick = async () => { try { await navigator.clipboard.writeText(RP.texto); toast("Copiado"); } catch { toast("No se pudo copiar; usa Descargar"); } };
 
-cargar().catch(() => mostrarLogin());
-setInterval(() => { if (!$("#app").classList.contains("hide") && document.visibilityState === "visible" && !document.activeElement.matches("textarea,input")) cargar(false).catch(() => {}); }, 60000);
+cargar().then(verificar).catch(() => mostrarLogin());
+setInterval(() => { if (!$("#app").classList.contains("hide") && document.visibilityState === "visible" && !document.activeElement.matches("textarea,input")) cargar(false).catch(() => {}); }, 30000);
+setInterval(() => { if (!$("#app").classList.contains("hide") && document.visibilityState === "visible") verificar(); }, 600000);
 </script>
 </body>
 </html>
