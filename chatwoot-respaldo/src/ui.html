@@ -511,19 +511,49 @@ function formatoAsis(t) {
     .replace(/#(\d{2,9})\b/g, (m, id) => `<a href="${esc(base)}${id}" target="_blank">#${id}</a>`);
 }
 function pintarAsis(extra) {
-  $("#asis").innerHTML = (ASIS.length ? ASIS.map((m) => m.role === "user" ? `<div class="b u">${esc(m.content)}</div>` : `<div class="b a">${formatoAsis(m.content)}${m.pasos?.length ? `<div class="small muted" style="margin-top:6px">Consultó: ${esc(m.pasos.join(", "))}${m.via ? " · respondió " + esc(m.via) : ""}</div>` : ""}</div>`).join("") : '<div class="b meta">Escribe tu pregunta o elige una sugerencia.</div>') + (extra || "");
+  $("#asis").innerHTML = (ASIS.length ? ASIS.map((m) => m.role === "user" ? `<div class="b u">${esc(m.content)}</div>` : `<div class="b a">${formatoAsis(m.content)}<div class="small muted" style="margin-top:6px">${m.pasos?.length ? `Consultó: ${esc(m.pasos.join(", "))} · ` : ""}${m.via ? "respondió " + esc(m.via) : "respondió Gemini"}${m.segundos ? ` · ${m.segundos} s` : ""}</div></div>`).join("") : '<div class="b meta">Escribe tu pregunta o elige una sugerencia.</div>') + (extra || "");
   $("#asis").scrollTop = 1e9;
 }
+let ASIS_CTL = null;
 async function preguntarAsis(texto) {
-  texto = texto.trim(); if (!texto) return;
+  texto = texto.trim(); if (!texto || ASIS_CTL) return;
   ASIS.push({ role: "user", content: texto }); $("#asis-in").value = "";
-  pintarAsis('<div class="b meta"><span class="spin"></span> Revisando tus chats…</div>');
+  const ctl = new AbortController(); ASIS_CTL = ctl;
+  const pasos = [], t0 = Date.now();
+  const progreso = () => pintarAsis(`<div class="b meta" style="text-align:left">⏳ Trabajando… <b>${Math.round((Date.now() - t0) / 1000)} s</b> <button class="mini" type="button" data-cancelar-asis>Cancelar</button>${pasos.length ? "<br>" + pasos.map((p) => esc(p)).join("<br>") : "<br>Enviando tu pregunta…"}</div>`);
+  progreso();
+  const reloj = setInterval(progreso, 1000);
+  const limite = setTimeout(() => ctl.abort(), 180000);
+  $("#f-asis button.pri").disabled = true;
   try {
-    const r = await call("POST", "/api/asistente", { historial: ASIS.map(({ role, content }) => ({ role, content })) });
-    ASIS.push({ role: "assistant", content: r.respuesta, pasos: r.pasos, via: r.via });
+    const r = await fetch("/api/asistente", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", signal: ctl.signal, body: JSON.stringify({ historial: ASIS.map(({ role, content }) => ({ role, content })) }) });
+    if (r.status === 401) { mostrarLogin(); throw new Error("Inicia sesión otra vez."); }
+    if (!r.ok || !r.body) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "Error " + r.status); }
+    const lector = r.body.getReader(), dec = new TextDecoder();
+    let buf = "", fin = null;
+    for (;;) {
+      const { value, done } = await lector.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const linea = buf.slice(0, i); buf = buf.slice(i + 1);
+        if (!linea.trim()) continue;
+        const ev = JSON.parse(linea);
+        if (ev.paso) { pasos.push(`${ev.s ?? ""} s · ${ev.paso}`); progreso(); }
+        if (ev.error) throw new Error(ev.error);
+        if (ev.fin) fin = ev;
+      }
+    }
+    if (!fin) throw new Error("La consulta se cortó antes de terminar. Intenta de nuevo.");
+    ASIS.push({ role: "assistant", content: fin.respuesta, pasos: fin.pasos, via: fin.via, segundos: Math.round((Date.now() - t0) / 1000) });
     pintarAsis();
-  } catch (e) { ASIS.pop(); pintarAsis(`<div class="b meta">⚠️ ${esc(e.message)}</div>`); }
+  } catch (e) {
+    ASIS.pop();
+    pintarAsis(`<div class="b meta">⚠️ ${esc(e.name === "AbortError" ? "Consulta cancelada (o tardó más de 3 minutos). Puedes intentar de nuevo." : e.message)}</div>`);
+  } finally { clearInterval(reloj); clearTimeout(limite); ASIS_CTL = null; $("#f-asis button.pri").disabled = false; }
 }
+document.addEventListener("click", (e) => { if (e.target.closest("[data-cancelar-asis]") && ASIS_CTL) ASIS_CTL.abort(); });
 $("#f-asis").onsubmit = (e) => { e.preventDefault(); preguntarAsis($("#asis-in").value); };
 document.querySelectorAll("#asis-sug .chip").forEach((c) => c.onclick = () => preguntarAsis(c.textContent));
 $("#asis-clear").onclick = () => { ASIS = []; pintarAsis(); };
